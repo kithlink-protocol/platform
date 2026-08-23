@@ -250,13 +250,14 @@ CREATE POLICY consent_grants_select ON consent_grants FOR SELECT
     OR current_setting('kithlink.user_id', true) IN
       (SELECT ap.user_id::text FROM applicant_profiles ap WHERE ap.id = consent_grants.applicant_id)
   );
-DROP POLICY IF EXISTS consent_grants_self_revoke ON consent_grants;
+DROP POLICY IF EXISTS consent_grants_self_insert ON consent_grants;
 CREATE POLICY consent_grants_self_insert ON consent_grants FOR INSERT
   WITH CHECK (
     current_setting('kithlink.role_class', true) = 'applicant'
     AND current_setting('kithlink.user_id', true) IN
       (SELECT ap.user_id::text FROM applicant_profiles ap WHERE ap.id = consent_grants.applicant_id)
   );
+DROP POLICY IF EXISTS consent_grants_self_revoke ON consent_grants;
 CREATE POLICY consent_grants_self_revoke ON consent_grants FOR UPDATE
   USING (
     current_setting('kithlink.user_id', true) IN
@@ -313,4 +314,9 @@ CREATE POLICY verifications_select ON verifications FOR SELECT
         AND cg.status = 'active'
         AND now() < COALESCE(cg.revoked_at, cg.expires_at, 'infinity'))
   );
--- No UPDATE/DELETE policies: only service contexts may mutate verification rows.
+-- Mutations: staff insert own-shelter rows (verifications_insert); lifecycle
+-- updates (confirm flips, applicant revoke) run under service ctx:
+DROP POLICY IF EXISTS verifications_service_update ON verifications;
+CREATE POLICY verifications_service_update ON verifications FOR UPDATE
+  USING (current_setting('kithlink.role_class', true) = 'service')
+  WITH CHECK (current_setting('kithlink.role_class', true) = 'service');

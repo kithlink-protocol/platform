@@ -78,6 +78,9 @@ importers:
       '@kithlink/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@kithlink/sync-adapters':
+        specifier: workspace:*
+        version: link:../../packages/sync-adapters
       '@nestjs/common':
         specifier: ^11
         version: 11.2.1(reflect-metadata@0.2.2)(rxjs@7.8.2)
@@ -220,6 +223,15 @@ importers:
       vitest:
         specifier: ^3.2.4
         version: 3.2.7(@types/node@22.20.1)(tsx@4.23.12)
+
+  packages/sync-adapters:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.15.0
+        version: 22.20.1
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
 
 packages:
 

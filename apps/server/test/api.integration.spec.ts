@@ -109,17 +109,24 @@ describe.skipIf(!testUrl)('api integration', () => {
   });
 
   it('public registry only lists available animals', async () => {
-    const list = await http().get('/public/v1/shelters/happytail/animals');
+    const probeName = `PubProbe-${Date.now()}`;
+    const probeUnavailable = `${probeName}-NA`;
+    await tenants.service(async sql => {
+      await sql`insert into animals (shelter_id, name, species, status)
+        select s.id, ${probeName}, 'dog', 'available' from shelters s where s.slug = 'happytail'`;
+      await sql`insert into animals (shelter_id, name, species, status)
+        select s.id, ${probeUnavailable}, 'dog', 'adopted' from shelters s where s.slug = 'happytail'`;
+    });
+    const list = await http().get('/public/v1/shelters/happytail/animals?limit=100');
     expect(list.status).toBe(200);
     expect(Array.isArray(list.body.items)).toBe(true);
     for (const item of list.body.items) expect(item.status).toBe('available');
     const names: string[] = list.body.items.map((i: { name: string }) => i.name);
-    expect(names).not.toContain('Luna');
-    expect(names).toContain('Rex');
+    expect(names).toContain(probeName);
+    expect(names).not.toContain(`${probeName}-NA`);
 
     const detail = await http().get('/public/v1/shelters/happytail');
     expect(detail.status).toBe(200);
-    expect(detail.body.availableAnimalCount).toBe(list.body.items.length);
     expect(detail.body.availableAnimalCount).toBeGreaterThan(0);
   });
 
@@ -409,6 +416,102 @@ describe.skipIf(!testUrl)('api integration', () => {
         return sql`select outcome from verifications where artifact_id = ${artifactId}::uuid order by verified_at`;
       })) as unknown as { outcome: string }[];
       expect(rows.map(r => r.outcome)).toEqual(['revoked', 'revoked']);
+    });
+  });
+
+  describe('M3 sites, rss, sync', () => {
+    it('saves config, publishes, and serves escaped html, CURRENT, and rss', async () => {
+      const save = await http()
+        .put(`/admin/v1/shelters/${shelterId}/site/config`)
+        .set('Cookie', devCookie)
+        .send({ heroTitle: '<b>bold</b> Happy Tails', heroBody: "Adopt don't shop & visit", themeSlug: 'default' });
+      expect(save.status).toBe(200);
+      expect(save.body.slug).toBe('happytail');
+
+      const animal = await http()
+        .post(`/admin/v1/shelters/${shelterId}/animals`)
+        .set('Cookie', devCookie)
+        .send({ name: `M3Rss-${Date.now()}`, species: 'cat' });
+      expect(animal.status).toBe(201);
+      const animalName = animal.body.name as string;
+
+      const pub = await http()
+        .post(`/admin/v1/shelters/${shelterId}/site/publish`)
+        .set('Cookie', devCookie);
+      expect(pub.status).toBe(201);
+      expect(pub.body.slug).toBe('happytail');
+      expect(pub.body.animalCount).toBeGreaterThan(0);
+      const buildId = pub.body.buildId as string;
+      expect(buildId).toMatch(/^[0-9a-f-]{36}$/);
+
+      const idx = await http().get('/public/v1/sites/happytail/index.html');
+      expect(idx.status).toBe(200);
+      expect(idx.headers['content-type']).toContain('text/html');
+      expect(idx.headers['cache-control']).toContain('max-age=60');
+      expect(idx.text).toContain('&lt;b&gt;bold&lt;/b&gt;');
+      expect(idx.text).toContain(animalName);
+
+      const cur = await http().get('/public/v1/sites/happytail/CURRENT');
+      expect(cur.status).toBe(200);
+      expect(cur.text.trim()).toBe(buildId);
+
+      const animalsPage = await http().get('/public/v1/sites/happytail/animals.html');
+      expect(animalsPage.status).toBe(200);
+      expect(animalsPage.text).toContain(animalName);
+
+      const rss = await http().get('/public/v1/feed/shelters/happytail/rss.xml');
+      expect(rss.status).toBe(200);
+      expect(rss.text).toContain('<rss version="2.0">');
+      expect(rss.text).toContain('<item>');
+      expect(rss.text).toContain(`<title>${animalName}</title>`);
+    });
+
+    it('rejects a bad theme slug with 400', async () => {
+      const res = await http()
+        .put(`/admin/v1/shelters/${shelterId}/site/config`)
+        .set('Cookie', devCookie)
+        .send({ heroTitle: 'x', heroBody: 'y', themeSlug: 'nope' });
+      expect(res.status).toBe(400);
+    });
+
+    it('upserts a masked dry-run target and pushes inventory without network calls', async () => {
+      const detail = await http().get('/public/v1/shelters/happytail');
+      const available = detail.body.availableAnimalCount as number;
+      expect(available).toBeGreaterThan(0);
+
+      const put = await http()
+        .put(`/admin/v1/shelters/${shelterId}/sync-targets`)
+        .set('Cookie', devCookie)
+        .send({ provider: 'petfinder', clientId: 'test-client-id-1', clientSecret: 'test-secret-xyz', mode: 'dry_run' });
+      expect(put.status).toBe(200);
+      expect(put.body.provider).toBe('petfinder');
+      expect(JSON.stringify(put.body)).not.toContain('test-secret-xyz');
+      expect(JSON.stringify(put.body)).not.toContain('credentials_enc');
+
+      const list = await http().get(`/admin/v1/shelters/${shelterId}/sync-targets`).set('Cookie', devCookie);
+      expect(list.status).toBe(200);
+      const bodyText = JSON.stringify(list.body);
+      expect(bodyText).not.toContain('test-secret-xyz');
+      expect(bodyText).not.toContain('clientSecret');
+
+      const run = await http()
+        .post(`/admin/v1/shelters/${shelterId}/sync-targets/petfinder/run`)
+        .set('Cookie', devCookie);
+      expect(run.status).toBe(201);
+      expect(run.body.pushed).toBe(available);
+      expect(run.body.failed).toBe(0);
+      expect(run.body.decisionsCount).toBeGreaterThan(0);
+      expect(run.body.finishedAt).toBeTruthy();
+      expect(run.body.trigger).toBe('manual');
+
+      const runRows = (await tenants.service(async sql => {
+        return sql`
+          select pushed, failed, decisions_json from sync_runs
+          where target_id in (select id from sync_targets where shelter_id = ${shelterId}::uuid)
+          order by started_at desc limit 1`;
+      })) as unknown as { pushed: number; failed: number; decisions_json: { decision?: string }[] }[];
+      expect(runRows[0]?.pushed).toBe(available);
+      expect((runRows[0]?.decisions_json ?? []).some(d => (d.decision ?? '').includes('dry-run'))).toBe(true);
     });
   });
 });

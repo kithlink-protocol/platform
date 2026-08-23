@@ -1,11 +1,27 @@
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
+import type { INestApplication } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { ProblemFilter } from './common/http-exception.filter';
 import { MailDispatcher } from './modules/notifications/notifications.module';
+import { SyncService } from './modules/sync/sync.service';
+
+const SYNC_CRON_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+export function startSyncCron(app: INestApplication): void {
+  if (process.env.ENABLE_SYNC_CRON !== '1') return;
+  const sync = app.get(SyncService);
+  const timer = setInterval(() => {
+    sync.runAllLive('cron').catch((error: unknown) => {
+      console.error('[sync] nightly run failed', error);
+    });
+  }, SYNC_CRON_INTERVAL_MS);
+  timer.unref();
+  console.log('[sync] nightly cron enabled (24h interval)');
+}
 
 export function configureApp(app: NestExpressApplication): void {
   app.use(helmet());
@@ -27,6 +43,7 @@ async function bootstrap(): Promise<void> {
   configureApp(app);
   app.get(MailDispatcher).start(Number(process.env.OUTBOX_INTERVAL_MS) || 10_000);
   await app.listen(Number(process.env.API_PORT) || 4000);
+  startSyncCron(app);
 }
 
 if (require.main === module) {

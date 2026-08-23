@@ -93,7 +93,9 @@ export default function DashboardPage() {
         <h1>Dashboard</h1>
         <p className="muted">Signed in as {session.user.email}</p>
         <p>
-          <Link href="/applications">Applications</Link>
+          <Link href="/applications">Applications</Link>{' '}
+          <Link href="/site">Site</Link>{' '}
+          <Link href="/sync">Sync</Link>
         </p>
       </header>
 

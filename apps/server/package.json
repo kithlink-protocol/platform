@@ -16,9 +16,10 @@
  "dependencies": {
   "@aws-sdk/client-s3": "^3.750.0",
   "@aws-sdk/s3-request-presigner": "^3.750.0",
-  "@kithlink/contracts": "workspace:*",
-  "@kithlink/db": "workspace:*",
-  "@nestjs/common": "^11",
+   "@kithlink/contracts": "workspace:*",
+   "@kithlink/db": "workspace:*",
+   "@kithlink/sync-adapters": "workspace:*",
+   "@nestjs/common": "^11",
   "@nestjs/config": "^4",
   "@nestjs/core": "^11",
   "@nestjs/platform-express": "^11",

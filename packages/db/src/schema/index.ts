@@ -408,3 +408,94 @@ export const consentGrantsRelations = relations(consentGrants, ({ one }) => ({
     references: [applications.id],
   }),
 }));
+
+export const sites = pgTable(
+  'sites',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    shelterId: uuid('shelter_id')
+      .notNull()
+      .unique()
+      .references(() => shelters.id, { onDelete: 'cascade' }),
+    themeSlug: text('theme_slug').notNull().default('default'),
+    brand: jsonb('brand').notNull().default({}),
+    heroTitle: text('hero_title').notNull().default(''),
+    heroBody: text('hero_body').notNull().default(''),
+    publishedAt: timestamp('published_at', { withTimezone: true }),
+  },
+  (t) => [check('sites_theme_check', sql`${t.themeSlug} IN ('default','rescue-min')`)],
+);
+
+export const sitePages = pgTable(
+  'site_pages',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    siteId: uuid('site_id')
+      .notNull()
+      .references(() => sites.id, { onDelete: 'cascade' }),
+    slug: text('slug').notNull(),
+    blocksJsonb: jsonb('blocks_jsonb').notNull().default([]),
+    position: integer('position').notNull().default(0),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('site_pages_site_slug_idx').on(t.siteId, t.slug),
+    check('site_pages_slug_check', sql`${t.slug} IN ('about','faq','contact')`),
+  ],
+);
+
+export const syncTargets = pgTable(
+  'sync_targets',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    shelterId: uuid('shelter_id')
+      .notNull()
+      .references(() => shelters.id, { onDelete: 'cascade' }),
+    provider: text('provider').notNull(),
+    credentialsEnc: text('credentials_enc').notNull(),
+    mode: text('mode').notNull().default('dry_run'),
+    status: text('status').notNull().default('active'),
+    lastRunAt: timestamp('last_run_at', { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex('sync_targets_shelter_provider_idx').on(t.shelterId, t.provider),
+    check('sync_targets_provider_check', sql`${t.provider} IN ('petfinder','adoptapet')`),
+    check('sync_targets_mode_check', sql`${t.mode} IN ('dry_run','live')`),
+  ],
+);
+
+export const syncRuns = pgTable(
+  'sync_runs',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    targetId: uuid('target_id')
+      .notNull()
+      .references(() => syncTargets.id, { onDelete: 'cascade' }),
+    trigger: text('trigger').notNull(),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+    pushed: integer('pushed').notNull().default(0),
+    pulled: integer('pulled').notNull().default(0),
+    failed: integer('failed').notNull().default(0),
+    decisionsJson: jsonb('decisions_json').notNull().default([]),
+  },
+  (t) => [index('sync_runs_target_idx').on(t.targetId, t.startedAt)],
+);
+
+export const sitesRelations = relations(sites, ({ one, many }) => ({
+  shelter: one(shelters, { fields: [sites.shelterId], references: [shelters.id] }),
+  pages: many(sitePages),
+}));
+
+export const sitePagesRelations = relations(sitePages, ({ one }) => ({
+  site: one(sites, { fields: [sitePages.siteId], references: [sites.id] }),
+}));
+
+export const syncTargetsRelations = relations(syncTargets, ({ one, many }) => ({
+  shelter: one(shelters, { fields: [syncTargets.shelterId], references: [shelters.id] }),
+  runs: many(syncRuns),
+}));
+
+export const syncRunsRelations = relations(syncRuns, ({ one }) => ({
+  target: one(syncTargets, { fields: [syncRuns.targetId], references: [syncTargets.id] }),
+}));

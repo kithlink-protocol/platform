@@ -22,7 +22,7 @@ async function main(): Promise<void> {
     await drizzleMigrate(drizzle(sql), { migrationsFolder: MIGRATIONS_DIR });
     console.log('[db] drizzle migrations applied');
 
-    for (const file of ['policies.sql']) {
+    for (const file of ['policies.sql', 'm3_sites_sync.sql']) {
       let text: string;
       try {
         text = readFileSync(join(SQL_DIR, file), 'utf8');

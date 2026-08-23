@@ -14,6 +14,8 @@ import { ApplicationsModule } from './modules/applications/applications.module';
 import { ConsentsModule } from './modules/consents/consents.module';
 import { ParseModule } from './modules/parse/parse.module';
 import { VerificationsModule } from './modules/verifications/verifications.module';
+import { SitesModule } from './modules/sites/sites.module';
+import { SyncModule } from './modules/sync/sync.module';
 
 @Module({
   imports: [
@@ -32,6 +34,8 @@ import { VerificationsModule } from './modules/verifications/verifications.modul
     ConsentsModule,
     ParseModule,
     VerificationsModule,
+    SitesModule,
+    SyncModule,
   ],
 })
 export class AppModule {}
