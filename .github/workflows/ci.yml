@@ -116,6 +116,8 @@ jobs:
         run: corepack enable && corepack prepare pnpm@10.20.0 --activate
       - name: Install
         run: pnpm install --frozen-lockfile=false
+      - name: Build workspace libraries
+        run: pnpm --filter @kithlink/contracts --filter @kithlink/db --filter @kithlink/sync-adapters run build
       - name: Provision DB roles (compose initdb)
         run: |
           PGPASSWORD=kithlink_dev psql -h localhost -U kithlink -d kithlink \
@@ -149,8 +151,6 @@ jobs:
           DATABASE_URL: postgres://kithlink_app:kithlink_app_dev@localhost:5432/kithlink
       - name: Install Playwright browsers
         run: pnpm --filter @kithlink/e2e exec playwright install --with-deps chromium
-      - name: Build workspace libraries
-        run: pnpm --filter @kithlink/contracts --filter @kithlink/db --filter @kithlink/sync-adapters run build
       - name: Run e2e
         run: pnpm --filter @kithlink/e2e test
       - name: Upload Playwright report
