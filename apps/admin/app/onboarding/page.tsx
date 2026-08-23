@@ -24,7 +24,7 @@ function groupByRole(templates: TaskTemplate[]): [string, TaskTemplate[]][] {
     list.push(template);
     groups.set(template.role, list);
   }
-  return [...groups.entries()].sort(
+  return Array.from(groups.entries()).sort(
     (a, b) =>
       ROLE_ORDER.indexOf(a[0] as EditorRole) - ROLE_ORDER.indexOf(b[0] as EditorRole) ||
       a[0].localeCompare(b[0]),
