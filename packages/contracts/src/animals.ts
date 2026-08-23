@@ -1,9 +1,12 @@
 import { z } from 'zod';
 import { cursorPageSchema, paginated, uuidSchema } from './common';
+import { slugSchema } from './shelters';
 
 export const animalSpecies = ['dog', 'cat', 'other'] as const;
 export const animalSexes = ['male', 'female', 'unknown'] as const;
 export const animalSizes = ['small', 'medium', 'large', 'xl'] as const;
+export const animalAgeClasses = ['baby', 'young', 'adult', 'senior'] as const;
+export type AnimalAgeClass = (typeof animalAgeClasses)[number];
 export const animalStatuses = [
   'draft',
   'available',
@@ -14,6 +17,16 @@ export const animalStatuses = [
 
 export const animalStatusSchema = z.enum(animalStatuses);
 export type AnimalStatus = (typeof animalStatuses)[number];
+
+// Buckets derive from birthYear only: baby <1y, young 1-2, adult 3-7, senior 8+.
+export function ageToAgeClass(birthYear: number | null, now: Date = new Date()): AnimalAgeClass | null {
+  if (birthYear === null) return null;
+  const age = now.getUTCFullYear() - birthYear;
+  if (age < 1) return 'baby';
+  if (age <= 2) return 'young';
+  if (age <= 7) return 'adult';
+  return 'senior';
+}
 
 const traitsSchema = z
   .object({
@@ -60,6 +73,7 @@ export const animalPublicSchema = z.object({
   birthYear: z.number().int().nullable(),
   sex: z.enum(animalSexes),
   size: z.enum(animalSizes).nullable(),
+  ageClass: z.enum(animalAgeClasses).nullable(),
   status: animalStatusSchema,
   description: z.string().nullable(),
   medical: z.record(z.unknown()),
@@ -75,3 +89,34 @@ export const animalListQuerySchema = cursorPageSchema.extend({
 });
 export type AnimalListQuery = z.infer<typeof animalListQuerySchema>;
 export const animalListResponseSchema = paginated(animalPublicSchema);
+
+export const animalSearchQuerySchema = cursorPageSchema.extend({
+  species: z.enum(animalSpecies).optional(),
+  sex: z.enum(animalSexes).optional(),
+  size: z.enum(animalSizes).optional(),
+  ageClass: z.enum(animalAgeClasses).optional(),
+  q: z.string().max(120).optional(),
+  shelterSlug: slugSchema.optional(),
+  nearLat: z.coerce.number().min(-90).max(90).optional(),
+  nearLng: z.coerce.number().min(-180).max(180).optional(),
+  radiusKm: z.coerce.number().min(1).max(500).optional(),
+});
+export type AnimalSearchQuery = z.infer<typeof animalSearchQuerySchema>;
+
+export const animalSearchItemSchema = animalPublicSchema.extend({
+  shelterName: z.string(),
+  shelterSlug: slugSchema,
+  distanceKm: z.number().nullable(),
+});
+export type AnimalSearchItem = z.infer<typeof animalSearchItemSchema>;
+export const animalSearchResponseSchema = paginated(animalSearchItemSchema);
+
+export const animalDetailSchema = animalPublicSchema.extend({
+  shelter: z.object({
+    name: z.string(),
+    slug: slugSchema,
+    city: z.string().nullable(),
+    state: z.string().nullable(),
+  }),
+});
+export type AnimalDetail = z.infer<typeof animalDetailSchema>;

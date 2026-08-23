@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Inject, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import {
+  addApplicationNoteSchema,
   applicationDecisionSchema,
   createApplicationSchema,
   staffApplicationListQuerySchema,
@@ -56,5 +57,37 @@ export class AdminApplicationsController {
   ) {
     const input = applicationDecisionSchema.parse(body);
     return this.applications.decide(principal.user.id, shelterId, id, input);
+  }
+
+  @Get(':id/applicant-history')
+  @RequireStaffRole('viewer')
+  applicantHistory(
+    @Principal() principal: Principal,
+    @Param('shelterId') shelterId: string,
+    @Param('id') id: string,
+  ) {
+    return this.applications.staffGetApplicantHistory(principal.user.id, shelterId, id);
+  }
+
+  @Get(':id/notes')
+  @RequireStaffRole('viewer')
+  listNotes(
+    @Principal() principal: Principal,
+    @Param('shelterId') shelterId: string,
+    @Param('id') id: string,
+  ) {
+    return this.applications.staffListNotes(principal.user.id, shelterId, id);
+  }
+
+  @Post(':id/notes')
+  @RequireStaffRole('coordinator')
+  addNote(
+    @Principal() principal: Principal,
+    @Param('shelterId') shelterId: string,
+    @Param('id') id: string,
+    @Body() body: unknown,
+  ) {
+    const input = addApplicationNoteSchema.parse(body);
+    return this.applications.staffAddNote(principal.user.id, shelterId, id, input);
   }
 }

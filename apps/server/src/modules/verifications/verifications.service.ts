@@ -17,7 +17,7 @@ import {
 import { AuditService } from '../../common/audit.service';
 import { TenantService } from '../db.module';
 
-interface ArtifactRow {
+export interface ArtifactRow {
   id: string;
   type: string;
   state: string;
@@ -30,7 +30,7 @@ interface ArtifactRow {
   sha256: string | null;
 }
 
-interface VerificationRow {
+export interface VerificationRow {
   id: string;
   artifact_id: string;
   shelter_id: string;
@@ -56,7 +56,7 @@ function mapVerifications(rows: VerificationRow[]): VerificationSummary[] {
   });
 }
 
-function mapArtifact(
+export function mapArtifact(
   row: ArtifactRow,
   verifications: VerificationRow[],
   viewerShelterId?: string,
@@ -79,7 +79,7 @@ function mapArtifact(
   });
 }
 
-async function selectVerificationRows(sql: AnySql, artifactId: string): Promise<VerificationRow[]> {
+export async function selectVerificationRows(sql: AnySql, artifactId: string): Promise<VerificationRow[]> {
   const rows = await sql`
     select v.id, v.artifact_id, v.shelter_id, v.method, v.outcome, v.verified_at, v.valid_until,
            s.name as shelter_name
@@ -90,7 +90,7 @@ async function selectVerificationRows(sql: AnySql, artifactId: string): Promise<
   return rows as unknown as VerificationRow[];
 }
 
-async function selectArtifactsForApplicant(
+export async function selectArtifactsForApplicant(
   sql: AnySql,
   applicantId: string,
 ): Promise<ArtifactRow[]> {

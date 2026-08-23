@@ -78,6 +78,11 @@ export default async function ShelterDetailPage({ params }: ShelterPageProps) {
           </Link>
         </p>
         <h1 className="t-title">{shelter.name}</h1>
+        {[shelter.city, shelter.state].filter(Boolean).join(', ') ? (
+          <p className="t-meta" data-testid="shelter-location">
+            {[shelter.city, shelter.state].filter(Boolean).join(', ')}
+          </p>
+        ) : null}
         <p className="t-meta">
           {shelter.availableAnimalCount}{' '}
           {shelter.availableAnimalCount === 1 ? 'animal' : 'animals'} available

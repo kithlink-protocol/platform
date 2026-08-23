@@ -33,3 +33,21 @@ forms · staff-management UI · Adopt-a-Pet in the sync dropdown · magic-link
 email verification · TOTP UI · clinic-API verifications · Petfinder inbound
 inquiries · LLM extraction on by default · i18n · managed-cloud Helm polish ·
 k6 in CI · Geist font swap. See the [remaining backlog](design/09-roadmap.md).
+
+## P0 basics batch (2026-08-23)
+
+| Capability | Status | Where |
+| --- | --- | --- |
+| Network-wide animal search w/ filters (species/sex/size/ageClass/q/shelter) | Shipped | `apps/server/src/modules/animals/service.search` · web `/animals` |
+| Location + radius search | Shipped (lat/lng + haversine) | shelters geo columns · `/animals?nearLat&nearLng&radiusKm` |
+| Animal detail pages | Shipped | web `/animals/[id]` + JSON-LD |
+| Shelter profile geodata editing | Shipped | `PATCH /admin/v1/shelters/:id` |
+| Applicant history at decision time | Shipped | `GET .../applications/:id/applicant-history` + History card |
+| Verification provenance (who/when/which org) | Shipped | same endpoint, per-artifact timeline |
+| Staff notes on applications | Shipped | `application_notes` + Notes card |
+| Forgot / reset password | Shipped | `/forgot-password`, `/reset-password`, outbox email |
+| Email verification (+resend) | Shipped (soft-gate banner) | `/verify-email`, dashboard banner |
+
+Planned next (from gap analysis §1–3): photo upload pipeline UI, saved pets/favorites,
+care-and-behavior facets, email-match alerts, reporting module, self-serve account
+export/delete.

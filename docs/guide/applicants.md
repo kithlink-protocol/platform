@@ -178,3 +178,13 @@ See also: [Troubleshooting](troubleshooting.md).
 
 ![Dark mode](../assets/web-home-dark.png)
 *Dark mode follows your device preference.*
+
+## Finding pets
+
+Open **Find a pet** (`/animals`) to search every shelter on the network at once.
+Filter by species, sex, size, age group (baby/young/adult/senior), free-text
+(name/breed/description), or by location: enter a latitude/longitude and radius to
+see results within reach — each card shows how far away the animal is. Open any card
+for photos, story, traits and the shelter's details, then hit **Apply**.
+
+![Animal discovery](../assets/web-animals.png)

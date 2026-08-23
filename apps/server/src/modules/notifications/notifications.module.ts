@@ -10,6 +10,29 @@ export interface OutboxEmailPayload {
   text: string;
 }
 
+/** Mail templates: plain-text bodies carrying the action URLs (docs/design/11 §4 item 5). */
+export function passwordResetEmail(to: string[], resetUrl: string): OutboxEmailPayload {
+  return {
+    to,
+    subject: 'Reset your Kithlink password',
+    text:
+      'We received a request to reset your Kithlink password.\n\n' +
+      `Reset your password: ${resetUrl}\n\n` +
+      'This link expires in 1 hour. If you did not request a reset, you can ignore this email.',
+  };
+}
+
+export function emailVerifyEmail(to: string[], verifyUrl: string): OutboxEmailPayload {
+  return {
+    to,
+    subject: 'Verify your Kithlink email',
+    text:
+      'Welcome to Kithlink!\n\n' +
+      `Verify your email: ${verifyUrl}\n\n` +
+      'This link expires in 48 hours.',
+  };
+}
+
 @Injectable()
 export class OutboxService {
   constructor(

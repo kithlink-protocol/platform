@@ -15,6 +15,16 @@ DROP POLICY IF EXISTS shelters_write ON shelters;
 CREATE POLICY shelters_write ON shelters FOR ALL
   USING (current_setting('kithlink.role_class', true) = 'service')
   WITH CHECK (current_setting('kithlink.role_class', true) = 'service');
+DROP POLICY IF EXISTS shelters_staff_update ON shelters;
+CREATE POLICY shelters_staff_update ON shelters FOR UPDATE
+  USING (
+    current_setting('kithlink.role_class', true) = 'staff'
+    AND current_setting('kithlink.shelter_id', true) = id::text
+  )
+  WITH CHECK (
+    current_setting('kithlink.role_class', true) = 'staff'
+    AND current_setting('kithlink.shelter_id', true) = id::text
+  );
 
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE users FORCE ROW LEVEL SECURITY;
@@ -47,6 +57,9 @@ DROP POLICY IF EXISTS sessions_touch ON sessions;
 CREATE POLICY sessions_touch ON sessions FOR UPDATE
   USING (current_setting('kithlink.role_class', true) = 'service')
   WITH CHECK (current_setting('kithlink.role_class', true) = 'service');
+DROP POLICY IF EXISTS sessions_service_delete ON sessions;
+CREATE POLICY sessions_service_delete ON sessions FOR DELETE
+  USING (current_setting('kithlink.role_class', true) = 'service');
 
 ALTER TABLE staff_members ENABLE ROW LEVEL SECURITY;
 ALTER TABLE staff_members FORCE ROW LEVEL SECURITY;

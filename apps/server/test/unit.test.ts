@@ -1,13 +1,29 @@
 import { describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
 import { UnauthorizedException } from '@nestjs/common';
-import { registerSchema, staffRoles } from '@kithlink/contracts';
+import { addApplicationNoteSchema, ageToAgeClass, applicantHistorySchema, registerSchema, staffRoles } from '@kithlink/contracts';
 import { mapSpecies, mapStatus, PetfinderAdapter } from '@kithlink/sync-adapters';
 import { decodeCursor, encodeCursor } from '../src/common/cursor.util';
+import { haversineKm } from '../src/common/geo';
 import { exceptionToProblem } from '../src/common/problem.util';
 import { STAFF_ROLE_RANK, hasSufficientRole } from '../src/common/roles';
 import { CryptoUtil } from '../src/common/crypto.util';
+import { createToken, hashToken } from '../src/modules/auth/tokens.util';
 import { computeConfidence } from '../src/modules/parse/score';
 import { escapeHtml } from '../src/modules/sites/render';
+
+describe('auth token hashing', () => {
+  it('roundtrips a raw token to its sha256 hash', () => {
+    const { raw, tokenHash } = createToken();
+    expect(raw).toMatch(/^[0-9a-f]{64}$/);
+    expect(hashToken(raw)).toBe(tokenHash);
+  });
+
+  it('hashes deterministically and never stores the raw value', () => {
+    expect(hashToken('abc')).toBe(createHash('sha256').update('abc').digest('hex'));
+    expect(hashToken('abc')).not.toBe('abc');
+  });
+});
 
 describe('staff role ranks', () => {
   it('orders viewer < volunteer < coordinator < admin < owner', () => {
@@ -190,5 +206,93 @@ describe('crypto seal/open', () => {
     expect(crypto.sha256Hex(Buffer.from('abc'))).toBe(
       'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
     );
+  });
+});
+
+describe('applicant history contract', () => {
+  it('parses a full history fixture', () => {
+    const parsed = applicantHistorySchema.parse({
+      profile: { legalName: 'Ada Lovelace', displayName: 'Ada', phone: '+14155551234' },
+      applicationsAtShelter: [
+        {
+          id: '11111111-2222-4333-8444-555555555555',
+          animalName: 'Biscuit',
+          status: 'submitted',
+          submittedAt: '2026-08-01T10:00:00.000Z',
+          decidedAt: null,
+        },
+      ],
+      sharedArtifacts: [
+        {
+          id: '22222222-3333-4333-8444-555555555555',
+          type: 'gov_id',
+          state: 'verified',
+          confidence: null,
+          extracted: null,
+          networkVerified: true,
+          verifications: [
+            {
+              shelterName: 'Happytail Rescue',
+              outcome: 'confirmed',
+              method: 'landlord_call',
+              verifiedAt: '2026-08-02T10:00:00.000Z',
+            },
+          ],
+          createdAt: '2026-08-01T09:00:00.000Z',
+        },
+      ],
+      generatedAt: '2026-08-03T10:00:00.000Z',
+    });
+    expect(parsed.applicationsAtShelter[0]?.status).toBe('submitted');
+    expect(parsed.sharedArtifacts[0]?.verifications[0]?.method).toBe('landlord_call');
+  });
+
+  it('accepts a minimal fixture and validates note bodies', () => {
+    const minimal = applicantHistorySchema.parse({
+      profile: { legalName: 'No Extras' },
+      applicationsAtShelter: [],
+      sharedArtifacts: [],
+      generatedAt: '2026-08-03T10:00:00.000Z',
+    });
+    expect(minimal.profile.displayName).toBeUndefined();
+    expect(minimal.profile.phone).toBeUndefined();
+
+    expect(addApplicationNoteSchema.safeParse({ body: '' }).success).toBe(false);
+    expect(addApplicationNoteSchema.safeParse({ body: 'x'.repeat(4001) }).success).toBe(false);
+    expect(addApplicationNoteSchema.safeParse({ body: 'Called references.' }).success).toBe(true);
+  });
+});
+
+describe('ageToAgeClass boundaries', () => {
+  const now = new Date(Date.UTC(2026, 7, 23));
+
+  it('buckets by whole-year age: baby <1, young 1-2, adult 3-7, senior 8+', () => {
+    expect(ageToAgeClass(2026, now)).toBe('baby');
+    expect(ageToAgeClass(2025, now)).toBe('young');
+    expect(ageToAgeClass(2024, now)).toBe('young');
+    expect(ageToAgeClass(2023, now)).toBe('adult');
+    expect(ageToAgeClass(2019, now)).toBe('adult');
+    expect(ageToAgeClass(2018, now)).toBe('senior');
+    expect(ageToAgeClass(2000, now)).toBe('senior');
+  });
+
+  it('treats future birth years as baby and null as unknown', () => {
+    expect(ageToAgeClass(2030, now)).toBe('baby');
+    expect(ageToAgeClass(null, now)).toBeNull();
+  });
+});
+
+describe('haversineKm', () => {
+  it('is zero for identical points', () => {
+    expect(haversineKm(45.5, -122.6, 45.5, -122.6)).toBe(0);
+  });
+
+  it('matches known great-circle distances', () => {
+    const oneDegreeLat = haversineKm(0, 0, 1, 0);
+    expect(oneDegreeLat).toBeGreaterThan(110);
+    expect(oneDegreeLat).toBeLessThan(112);
+    const pdxToAustin = haversineKm(45.52, -122.68, 30.27, -97.74);
+    expect(pdxToAustin).toBeGreaterThan(2700);
+    expect(pdxToAustin).toBeLessThan(2950);
   });
 });

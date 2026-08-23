@@ -1,11 +1,18 @@
 import 'server-only';
 
 import type {
+  AnimalDetail,
   AnimalPublic,
+  AnimalSearchItem,
   Problem,
   ShelterDetail,
   ShelterPublic,
 } from '@kithlink/contracts';
+
+interface AnimalSearchResponse {
+  items: AnimalSearchItem[];
+  nextCursor: string | null;
+}
 
 const API_URL = process.env.API_URL ?? 'http://localhost:4000';
 
@@ -50,4 +57,18 @@ export async function listShelterAnimals(slug: string): Promise<AnimalPublic[]> 
     `/public/v1/shelters/${encodeURIComponent(slug)}/animals?limit=25`,
   );
   return data.items;
+}
+
+export async function searchAnimals(
+  params: Record<string, string | undefined>,
+): Promise<AnimalSearchResponse> {
+  const usp = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== '') usp.set(key, value);
+  }
+  return fetchJson<AnimalSearchResponse>(`/public/v1/animals?${usp.toString()}`);
+}
+
+export async function getAnimal(id: string): Promise<AnimalDetail> {
+  return fetchJson<AnimalDetail>(`/public/v1/animals/${encodeURIComponent(id)}`);
 }

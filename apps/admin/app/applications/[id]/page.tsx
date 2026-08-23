@@ -6,6 +6,8 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { ApiError, apiFetch } from '@/lib/api';
 import type {
+  ApplicantHistory,
+  ApplicationNote,
   ArtifactWithVerifications,
   AuthSession,
   StaffApplicationDetail,
@@ -21,6 +23,11 @@ export default function ApplicationDetailPage() {
   const applicationId = typeof params.id === 'string' ? params.id : '';
   const [session, setSession] = useState<AuthSession | null>(null);
   const [detail, setDetail] = useState<StaffApplicationDetail | null>(null);
+  const [history, setHistory] = useState<ApplicantHistory | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [notes, setNotes] = useState<ApplicationNote[]>([]);
+  const [noteBody, setNoteBody] = useState('');
+  const [notePending, setNotePending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<string | null>(null);
 
@@ -60,6 +67,60 @@ export default function ApplicationDetailPage() {
   useEffect(() => {
     refetch();
   }, [refetch]);
+
+  const base = shelterId
+    ? `/admin/v1/shelters/${encodeURIComponent(shelterId)}/applications/${applicationId}`
+    : null;
+
+  const refetchNotes = useCallback(() => {
+    if (!base) return;
+    apiFetch<{ items: ApplicationNote[] }>(`${base}/notes`)
+      .then((data) => setNotes(data.items))
+      .catch(() => undefined);
+  }, [base]);
+
+  useEffect(() => {
+    if (!base) return;
+    let cancelled = false;
+    apiFetch<ApplicantHistory>(`${base}/applicant-history`)
+      .then((data) => {
+        if (!cancelled) setHistory(data);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setHistoryError(
+          err instanceof Error ? err.message : 'Could not load applicant history.',
+        );
+      });
+    refetchNotes();
+    return () => {
+      cancelled = true;
+    };
+  }, [base, refetchNotes]);
+
+  async function addNote() {
+    if (!base || noteBody.trim().length === 0) return;
+    setNotePending(true);
+    setError(null);
+    try {
+      await apiFetch(`${base}/notes`, {
+        method: 'POST',
+        body: JSON.stringify({ body: noteBody }),
+      });
+      setNoteBody('');
+      refetchNotes();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Could not add the note.');
+    } finally {
+      setNotePending(false);
+    }
+  }
+
+  const provenance = history
+    ? history.sharedArtifacts.flatMap((artifact) =>
+        artifact.verifications.map((v) => ({ artifactType: artifact.type, ...v })),
+      )
+    : [];
 
   async function recordVerification(
     artifact: ArtifactWithVerifications,
@@ -286,6 +347,99 @@ export default function ApplicationDetailPage() {
           </dl>
         </aside>
       </div>
+
+      <section aria-labelledby="history-heading" className="card section-gap" data-testid="history-card">
+        <h2 id="history-heading" className="t-heading">
+          History
+        </h2>
+        {historyError ? (
+          <p role="alert" className="alert alert-danger">
+            {historyError}
+          </p>
+        ) : null}
+        {!history ? (
+          <p className="t-meta">Loading history…</p>
+        ) : (
+          <>
+            <h3 className="t-subheading">Applications at your shelter</h3>
+            {history.applicationsAtShelter.length === 0 ? (
+              <div className="empty-state">No applications at your shelter.</div>
+            ) : (
+              <table>
+                <tbody>
+                  {history.applicationsAtShelter.map((a) => (
+                    <tr key={a.id} data-testid="history-app-row">
+                      <td>{a.animalName}</td>
+                      <td>
+                        <span className="badge" data-status={a.status}>
+                          {a.status}
+                        </span>
+                      </td>
+                      <td className="t-meta">{formatDate(a.submittedAt)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+
+            <h3 className="t-subheading">Shared document provenance</h3>
+            {provenance.length === 0 ? (
+              <div className="empty-state">No verifications recorded for shared documents.</div>
+            ) : (
+              <ul className="timeline" data-testid="verification-provenance-list">
+                {provenance.map((v, index) => (
+                  <li key={`${index}`} data-testid="verification-provenance">
+                    <span className="t-meta">
+                      {v.artifactType} · {v.shelterName} · {v.method} ·{' '}
+                      <span className="badge" data-status={v.outcome}>
+                        {v.outcome}
+                      </span>{' '}
+                      · {formatDate(v.verifiedAt)}
+                      {v.validUntil ? ` · valid until ${formatDate(v.validUntil)}` : ''}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
+        )}
+      </section>
+
+      <section aria-labelledby="notes-heading" className="card section-gap">
+        <h2 id="notes-heading" className="t-heading">
+          Staff notes
+        </h2>
+        {notes.length === 0 ? (
+          <div className="empty-state">No notes yet.</div>
+        ) : (
+          <ul className="timeline">
+            {notes.map((note) => (
+              <li key={note.id} data-testid="note-item">
+                <span className="t-meta">
+                  {note.authorName ?? 'unknown'} · {formatDate(note.createdAt)} ·{' '}
+                  {note.body}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+        <textarea
+          data-testid="note-input"
+          aria-label="New note"
+          rows={3}
+          value={noteBody}
+          onChange={(e) => setNoteBody(e.target.value)}
+        />
+        <button
+          type="button"
+          className="btn btn-primary"
+          data-testid="note-add"
+          disabled={notePending || noteBody.trim().length === 0}
+          onClick={addNote}
+        >
+          Add note
+        </button>
+      </section>
     </main>
   );
 }

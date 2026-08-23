@@ -72,6 +72,9 @@ export default function LoginPage() {
           {submitting ? 'Logging in…' : 'Log in'}
         </button>
       </form>
+      <p>
+        <Link href="/forgot-password">Forgot password?</Link>
+      </p>
       <p className="section-gap">
         New here? <Link href="/register">Create an account</Link>
       </p>

@@ -57,3 +57,5 @@ export async function withTenantTx<T>(
     return fn(txDb);
   });
 }
+
+export type { PendingQuery, Row, Sql } from 'postgres';

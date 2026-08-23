@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { cursorPageSchema, paginated, uuidSchema } from './common';
+import { artifactPublicSchema } from './artifacts';
 
 export const applicationStatuses = [
   'draft',
@@ -61,3 +62,42 @@ export const applicationDecisionSchema = z.object({
 export type ApplicationDecisionInput = z.infer<typeof applicationDecisionSchema>;
 
 export const applicationListResponseSchema = paginated(applicationPublicSchema);
+
+export const applicationNoteSchema = z.object({
+  id: uuidSchema,
+  authorName: z.string().nullable(),
+  body: z.string(),
+  createdAt: z.string().datetime(),
+});
+export type ApplicationNote = z.infer<typeof applicationNoteSchema>;
+
+export const addApplicationNoteSchema = z.object({
+  body: z.string().min(1).max(4000),
+});
+export type AddApplicationNoteInput = z.infer<typeof addApplicationNoteSchema>;
+
+export const applicationNotesResponseSchema = z.object({
+  items: z.array(applicationNoteSchema),
+});
+export type ApplicationNotesResponse = z.infer<typeof applicationNotesResponseSchema>;
+
+export const applicantHistorySchema = z.object({
+  profile: z.object({
+    legalName: z.string(),
+    displayName: z.string().optional(),
+    phone: z.string().optional(),
+  }),
+  applicationsAtShelter: z.array(
+    z.object({
+      id: uuidSchema,
+      animalName: z.string(),
+      status: applicationStatusSchema,
+      submittedAt: z.string().datetime().nullable(),
+      decidedAt: z.string().datetime().nullable(),
+    }),
+  ),
+  sharedArtifacts: z.array(artifactPublicSchema),
+  generatedAt: z.string().datetime(),
+});
+export type ApplicantHistory = z.infer<typeof applicantHistorySchema>;
+export type ApplicantHistoryApplication = ApplicantHistory['applicationsAtShelter'][number];

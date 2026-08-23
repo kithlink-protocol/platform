@@ -3,8 +3,11 @@ import { Controller, Get, NotFoundException, Param, Query,
 } from '@nestjs/common';
 import {
   animalListQuerySchema,
+  animalSearchQuerySchema,
   listSheltersQuerySchema,
   shelterDetailSchema,
+  type AnimalDetail,
+  type AnimalSearchItem,
   type ShelterDetail,
 } from '@kithlink/contracts';
 import type { TenantContext } from '@kithlink/db';
@@ -16,6 +19,8 @@ interface ShelterCountRow {
   id: string;
   name: string;
   slug: string;
+  city: string | null;
+  state: string | null;
   available_animal_count: number;
 }
 
@@ -24,6 +29,8 @@ function mapShelterDetail(row: ShelterCountRow): ShelterDetail {
     id: row.id,
     name: row.name,
     slug: row.slug,
+    city: row.city ?? null,
+    state: row.state ?? null,
     availableAnimalCount: row.available_animal_count,
   });
 }
@@ -48,7 +55,7 @@ export class PublicRegistryController {
     return this.tenants.withTenant(ANON_CTX, async sql => {
       const filter = q.q !== undefined ? sql` where s.name ilike ${'%' + q.q + '%'}` : sql``;
       const rows = (await sql`
-        select s.id, s.name, s.slug,
+        select s.id, s.name, s.slug, s.city, s.state,
           (select count(*)::int from animals a where a.shelter_id = s.id and a.status = 'available')
             as available_animal_count
         from shelters s${filter}
@@ -56,6 +63,19 @@ export class PublicRegistryController {
         limit ${q.limit}`) as unknown as ShelterCountRow[];
       return rows.map(mapShelterDetail);
     });
+  }
+
+  @Get('animals')
+  search(@Query() query: unknown): Promise<{ items: AnimalSearchItem[]; nextCursor: string | null }> {
+    const q = animalSearchQuerySchema.parse(query);
+    return this.animalsService.search(ANON_CTX, q);
+  }
+
+  @Get('animals/:id')
+  async animalDetail(@Param('id') id: string): Promise<AnimalDetail> {
+    const animal = await this.animalsService.getPublicById(ANON_CTX, id);
+    if (!animal) throw new NotFoundException('Animal not found');
+    return animal;
   }
 
   @Get('shelters/:slug')
@@ -77,7 +97,7 @@ export class PublicRegistryController {
   private resolveShelter(slug: string): Promise<ShelterCountRow | null> {
     return this.tenants.withTenant(ANON_CTX, async sql => {
       const rows = (await sql`
-        select s.id, s.name, s.slug,
+        select s.id, s.name, s.slug, s.city, s.state,
           (select count(*)::int from animals a where a.shelter_id = s.id and a.status = 'available')
             as available_animal_count
         from shelters s

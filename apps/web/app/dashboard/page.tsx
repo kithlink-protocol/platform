@@ -11,11 +11,25 @@ export default function DashboardPage() {
   const router = useRouter();
   const sessionState = useSession();
   const [loggingOut, setLoggingOut] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [resent, setResent] = useState(false);
 
   async function onLogout() {
     setLoggingOut(true);
     await apiFetch('/app/v1/auth/logout', { method: 'POST' }).catch(() => undefined);
     router.push('/login');
+  }
+
+  async function onResend() {
+    setResending(true);
+    try {
+      await apiFetch('/app/v1/auth/resend-verification', { method: 'POST' });
+      setResent(true);
+    } catch {
+      // banner stays; the user can retry
+    } finally {
+      setResending(false);
+    }
   }
 
   if (sessionState.status === 'loading') {
@@ -46,6 +60,19 @@ export default function DashboardPage() {
       <p className="t-lede">
         Signed in as <strong>{sessionState.session.user.email}</strong>
       </p>
+      {sessionState.session.user.emailVerified === false ? (
+        <p role="alert" className="alert alert-warn">
+          Verify your email — check your inbox{' '}
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={onResend}
+            disabled={resending || resent}
+          >
+            {resent ? 'Sent' : resending ? 'Sending…' : 'Resend'}
+          </button>
+        </p>
+      ) : null}
       <ul className="menu">
         <li>
           <Link className="card card-link" href="/applications">

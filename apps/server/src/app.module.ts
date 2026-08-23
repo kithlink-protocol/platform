@@ -4,6 +4,7 @@ import { DbModule } from './modules/db.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { StaffModule } from './modules/staff/staff.module';
 import { AnimalsModule } from './modules/animals/animals.module';
+import { SheltersModule } from './modules/shelters/shelters.module';
 import { PublicModule } from './modules/public/public.module';
 import { CryptoModule } from './common/crypto.util';
 import { S3Module } from './modules/s3/s3.module';
@@ -24,6 +25,7 @@ import { SyncModule } from './modules/sync/sync.module';
     AuthModule,
     StaffModule,
     AnimalsModule,
+    SheltersModule,
     PublicModule,
     CryptoModule,
     S3Module,

@@ -18,13 +18,29 @@ export const shelterPublicSchema = z.object({
   id: uuidSchema,
   name: z.string(),
   slug: slugSchema,
+  city: z.string().nullable().default(null),
+  state: z.string().nullable().default(null),
 });
 export type ShelterPublic = z.infer<typeof shelterPublicSchema>;
 
 export const shelterDetailSchema = shelterPublicSchema.extend({
+  latitude: z.number().nullable().default(null),
+  longitude: z.number().nullable().default(null),
   availableAnimalCount: z.number().int(),
 });
 export type ShelterDetail = z.infer<typeof shelterDetailSchema>;
+
+export const updateShelterProfileSchema = z
+  .object({
+    name: z.string().min(2).max(200).optional(),
+    city: z.string().max(120).nullish(),
+    state: z.string().max(60).nullish(),
+    postalCode: z.string().max(20).nullish(),
+    latitude: z.number().min(-90).max(90).nullish(),
+    longitude: z.number().min(-180).max(180).nullish(),
+  })
+  .refine(input => Object.keys(input).length > 0, { message: 'At least one field required' });
+export type UpdateShelterProfileInput = z.infer<typeof updateShelterProfileSchema>;
 
 export const listSheltersQuerySchema = z.object({
   q: z.string().max(120).optional(),

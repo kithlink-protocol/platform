@@ -4,13 +4,21 @@ import { BadRequestException, Injectable, NotFoundException,
   Inject,
 } from '@nestjs/common';
 import {
+  ageToAgeClass,
+  animalDetailSchema,
   animalListResponseSchema,
   animalPublicSchema,
+  animalSearchItemSchema,
+  animalSearchResponseSchema,
+  type AnimalAgeClass,
+  type AnimalDetail,
   type AnimalPhotoPublic,
   type AnimalPublic,
+  type AnimalSearchItem,
+  type AnimalSearchQuery,
   type AnimalStatus,
 } from '@kithlink/contracts';
-import { animalPhotos, animals, type AnySql, type TenantContext } from '@kithlink/db';
+import { animalPhotos, animals, type AnySql, type PendingQuery, type Row, type Sql, type TenantContext } from '@kithlink/db';
 import { decodeCursor, encodeCursor } from '../../common/cursor.util';
 import { AuditService } from '../../common/audit.service';
 import { isForeignKeyViolation } from '../../common/db.util';
@@ -56,8 +64,8 @@ interface PhotoRawRow {
   alt_text: string | null;
 }
 
-function mapAnimal(row: AnimalRawRow, photos: PhotoRawRow[]): AnimalPublic {
-  return animalPublicSchema.parse({
+function animalCore(row: AnimalRawRow, photos: PhotoRawRow[]) {
+  return {
     id: row.id,
     shelterId: row.shelter_id,
     name: row.name,
@@ -66,13 +74,32 @@ function mapAnimal(row: AnimalRawRow, photos: PhotoRawRow[]): AnimalPublic {
     birthYear: row.birth_year ?? null,
     sex: row.sex,
     size: row.size ?? null,
+    ageClass: ageToAgeClass(row.birth_year ?? null),
     status: row.status,
     description: row.description ?? null,
     medical: row.medical_json ?? {},
     traits: row.traits_json ?? {},
     photos: photos.map(p => ({ id: p.id, position: p.position, altText: p.alt_text ?? null, url: null })),
     createdAt: new Date(row.created_at as unknown as string | Date).toISOString(),
-  });
+  };
+}
+
+function mapAnimal(row: AnimalRawRow, photos: PhotoRawRow[]): AnimalPublic {
+  return animalPublicSchema.parse(animalCore(row, photos));
+}
+
+interface ShelterJoinRow {
+  shelter_name: string;
+  shelter_slug: string;
+}
+
+interface SearchRow extends AnimalRawRow, ShelterJoinRow {
+  distance_km: number | null;
+}
+
+interface DetailRow extends AnimalRawRow, ShelterJoinRow {
+  shelter_city: string | null;
+  shelter_state: string | null;
 }
 
 @Injectable()
@@ -117,8 +144,7 @@ export class AnimalsService {
     });
   }
 
-  async getById(ctx: TenantContext, shelterId: string, id: string): Promise<AnimalPublic | null> {
-    return this.tenants.withTenant(ctx, async sql => {
+  async getById(ctx: TenantContext, shelterId: string, id: string): Promise<AnimalPublic | null> {    return this.tenants.withTenant(ctx, async sql => {
       const rows = (await sql`
         select id, shelter_id, name, species, breed, birth_year, sex, size, status, description, medical_json, traits_json, created_at
         from animals
@@ -128,6 +154,109 @@ export class AnimalsService {
       if (!row) return null;
       const photos = await this.loadPhotos(sql, [row.id]);
       return mapAnimal(row, photos.get(row.id) ?? []);
+    });
+  }
+
+  async search(
+    ctx: TenantContext,
+    q: AnimalSearchQuery,
+  ): Promise<{ items: AnimalSearchItem[]; nextCursor: string | null }> {
+    const cursor = q.cursor ? decodeCursor(q.cursor) : null;
+    if (q.cursor && !cursor) throw new BadRequestException('Invalid cursor');
+    return this.tenants.withTenant(ctx, async sql => {
+      type Frag = PendingQuery<Row[]>;
+      const filters: Frag[] = [sql`a.status = 'available'`];
+      if (q.species) filters.push(sql`a.species = ${q.species}`);
+      if (q.sex) filters.push(sql`a.sex = ${q.sex}`);
+      if (q.size) filters.push(sql`a.size = ${q.size}`);
+      if (q.shelterSlug) filters.push(sql`s.slug = ${q.shelterSlug}`);
+      if (q.q) {
+        const pattern = `%${q.q}%`;
+        filters.push(
+          sql`(a.name ilike ${pattern} or a.breed ilike ${pattern} or a.description ilike ${pattern})`,
+        );
+      }
+      if (q.ageClass) {
+        const year = new Date().getUTCFullYear();
+        const buckets: Record<AnimalAgeClass, Frag> = {
+          baby: sql`a.birth_year > ${year - 1}`,
+          young: sql`a.birth_year between ${year - 2} and ${year - 1}`,
+          adult: sql`a.birth_year between ${year - 7} and ${year - 3}`,
+          senior: sql`a.birth_year <= ${year - 8}`,
+        };
+        filters.push(buckets[q.ageClass]);
+      }
+      const { nearLat, nearLng, radiusKm } = q;
+      const hasGeo = nearLat !== undefined && nearLng !== undefined && radiusKm !== undefined;
+      let distanceExpr: Frag | null = null;
+      if (hasGeo && nearLat !== undefined && nearLng !== undefined && radiusKm !== undefined) {
+        distanceExpr = sql`(6371 * 2 * asin(sqrt(
+          power(sin(radians(s.latitude - ${nearLat}) / 2), 2)
+          + cos(radians(${nearLat})) * cos(radians(s.latitude))
+          * power(sin(radians(s.longitude - ${nearLng}) / 2), 2))))`;
+        filters.push(sql`s.latitude is not null and s.longitude is not null and ${distanceExpr} <= ${radiusKm}`);
+      }
+      const distanceSelect =
+        distanceExpr !== null
+          ? sql`, round(${distanceExpr}::numeric, 1)::float8 as distance_km`
+          : sql`, null::float8 as distance_km`;
+      const cursorFrag = cursor
+        ? sql`and (a.created_at, a.id) < (${cursor.createdAt}::timestamptz, ${cursor.id}::uuid)`
+        : sql``;
+      const rows = (await sql`
+        select a.id, a.shelter_id, a.name, a.species, a.breed, a.birth_year, a.sex, a.size,
+               a.status, a.description, a.medical_json, a.traits_json, a.created_at,
+               s.name as shelter_name, s.slug as shelter_slug${distanceSelect}
+        from animals a
+        join shelters s on s.id = a.shelter_id
+        where ${filters.reduce<Frag>((acc, f) => (acc ? sql`(${acc}) and (${f})` : f), sql`true`)} ${cursorFrag}
+        order by a.created_at desc, a.id desc
+        limit ${q.limit + 1}`) as unknown as SearchRow[];
+      const page = rows.slice(0, q.limit);
+      const photosByAnimal = await this.loadPhotos(sql, page.map(r => r.id));
+      const items = page.map(r =>
+        animalSearchItemSchema.parse({
+          ...animalCore(r, photosByAnimal.get(r.id) ?? []),
+          shelterName: r.shelter_name,
+          shelterSlug: r.shelter_slug,
+          distanceKm: r.distance_km ?? null,
+        }),
+      );
+      const hasMore = rows.length > q.limit;
+      const last = page[page.length - 1];
+      const nextCursor =
+        hasMore && last
+          ? encodeCursor({
+              createdAt: new Date(last.created_at as unknown as string | Date).toISOString(),
+              id: last.id,
+            })
+          : null;
+      return animalSearchResponseSchema.parse({ items, nextCursor });
+    });
+  }
+
+  async getPublicById(ctx: TenantContext, id: string): Promise<AnimalDetail | null> {
+    return this.tenants.withTenant(ctx, async sql => {
+      const rows = (await sql`
+        select a.id, a.shelter_id, a.name, a.species, a.breed, a.birth_year, a.sex, a.size,
+               a.status, a.description, a.medical_json, a.traits_json, a.created_at,
+               s.name as shelter_name, s.slug as shelter_slug, s.city as shelter_city, s.state as shelter_state
+        from animals a
+        join shelters s on s.id = a.shelter_id
+        where a.id = ${id}::uuid and a.status = 'available'
+        limit 1`) as unknown as DetailRow[];
+      const row = rows[0];
+      if (!row) return null;
+      const photos = await this.loadPhotos(sql, [row.id]);
+      return animalDetailSchema.parse({
+        ...animalCore(row, photos.get(row.id) ?? []),
+        shelter: {
+          name: row.shelter_name,
+          slug: row.shelter_slug,
+          city: row.shelter_city ?? null,
+          state: row.shelter_state ?? null,
+        },
+      });
     });
   }
 

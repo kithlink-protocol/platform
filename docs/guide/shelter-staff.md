@@ -137,3 +137,16 @@ See also: [Applicant Guide](applicants.md) for the adopter-side view,
 
 ![Application review](../assets/admin-applications.png)
 *Review queue.*
+
+## Applicant history & verification provenance
+
+Every application review screen has a **History** card: all past applications this
+person made to *your* shelter (any status), plus — for artifacts they consented to
+share — the full verification provenance: which shelter verified it, when, by what
+method, and until when it counts. Your own records stay visible even after a consent
+expires; other shelters' data only appears while an active grant exists.
+
+## Notes
+
+Leave internal **Notes** on any application (they are audited and never shown to
+applicants).

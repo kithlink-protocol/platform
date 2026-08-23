@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import request from 'supertest';
 import { createDb, type DbHandles } from '@kithlink/db';
+import { animalSearchResponseSchema } from '@kithlink/contracts';
 import { AppModule } from '../src/app.module';
 import { ProblemFilter } from '../src/common/http-exception.filter';
 import { TenantService } from '../src/modules/db.module';
@@ -419,6 +420,146 @@ describe.skipIf(!testUrl)('api integration', () => {
     });
   });
 
+  describe('M5 applicant history + notes', () => {
+    let m5ApplicantCookie: string[];
+    let m5ProfileId: string;
+    let m5ApplicationId: string;
+    let m5ArtifactId: string;
+
+    it('assembles history: two applications at shelter, full provenance, audit row', async () => {
+      const email = `m5-${Date.now()}@x.dev`;
+      await http().post('/app/v1/auth/register').send({ email, password: 'Password123x' });
+      m5ApplicantCookie = (
+        await http().post('/app/v1/auth/login').send({ email, password: 'Password123x' })
+      ).headers['set-cookie'];
+      const put = await http().put('/app/v1/me/profile').set('Cookie', m5ApplicantCookie).send({
+        legalName: 'M5 Applicant',
+        displayName: 'Em Five',
+        phone: '+14155550005',
+      });
+      expect(put.status).toBe(200);
+      m5ProfileId = put.body.id as string;
+
+      const animalAId = (await tenants.service(async sql => {
+        const rows = (await sql`
+          insert into animals (shelter_id, name, species, status)
+          values (${shelterId}::uuid, 'M5A', 'dog', 'available') returning id`) as unknown as {
+          id: string;
+        }[];
+        return rows[0]!.id;
+      })) as string;
+      const applyA = await http().post('/app/v1/applications').set('Cookie', m5ApplicantCookie)
+        .send({ animalId: animalAId });
+      expect(applyA.status).toBe(201);
+      m5ApplicationId = applyA.body.application.id as string;
+
+      // Second (older) application by the same applicant, inserted directly.
+      const animalBId = (await tenants.service(async sql => {
+        const rows = (await sql`
+          insert into animals (shelter_id, name, species, status)
+          values (${shelterId}::uuid, 'M5B', 'cat', 'available') returning id`) as unknown as {
+          id: string;
+        }[];
+        return rows[0]!.id;
+      })) as string;
+      await tenants.service(async sql => {
+        await sql`
+          insert into applications (animal_id, shelter_id, applicant_id, status, answers_json, submitted_at)
+          values (${animalBId}::uuid, ${shelterId}::uuid, ${m5ProfileId}::uuid, 'denied', '{}'::jsonb,
+                  now() - interval '30 days')`;
+      });
+
+      // Artifact + verification flow per M2 helpers.
+      m5ArtifactId = (await tenants.service(async sql => {
+        const rows = (await sql`
+          insert into artifacts (applicant_id, type, state, extracted_json)
+          values (${m5ProfileId}::uuid, 'lease_addendum', 'parsed', '{"landlord_phone":"+15551234567"}'::jsonb)
+          returning id`) as unknown as { id: string }[];
+        return rows[0]!.id;
+      })) as string;
+      const confirm = await http()
+        .post(`/admin/v1/shelters/${shelterId}/artifacts/${m5ArtifactId}/verifications`)
+        .set('Cookie', devCookie)
+        .send({ method: 'landlord_call', outcome: 'confirmed' });
+      expect(confirm.status).toBe(201);
+
+      const history = await http()
+        .get(`/admin/v1/shelters/${shelterId}/applications/${m5ApplicationId}/applicant-history`)
+        .set('Cookie', devCookie);
+      expect(history.status).toBe(200);
+      expect(history.body.profile.legalName).toBe('M5 Applicant');
+      expect(history.body.applicationsAtShelter).toHaveLength(2);
+      expect(history.body.generatedAt).toBeTruthy();
+      const happytailConfirmed = history.body.sharedArtifacts
+        .flatMap((a: { verifications: { shelterName: string; outcome: string; verifiedAt?: string }[] }) => a.verifications)
+        .find(
+          (v: { shelterName: string; outcome: string }) =>
+            v.shelterName === 'Happytail Rescue' && v.outcome === 'confirmed',
+        ) as { verifiedAt: string } | undefined;
+      expect(happytailConfirmed).toBeTruthy();
+      expect(happytailConfirmed!.verifiedAt).toBeTruthy();
+
+      const auditRows = (await tenants.service(
+        sql =>
+          sql`select count(*)::int as n from audit_logs where action = 'applicant.history_viewed'`,
+      )) as unknown as { n: number }[];
+      expect(auditRows[0]!.n).toBeGreaterThan(0);
+    });
+
+    it('adds a note as coordinator and lists it ascending with author name', async () => {
+      const add = await http()
+        .post(`/admin/v1/shelters/${shelterId}/applications/${m5ApplicationId}/notes`)
+        .set('Cookie', devCookie)
+        .send({ body: 'Spoke with applicant by phone.' });
+      expect(add.status).toBe(201);
+      expect(add.body.authorName).toBe('dev@kithlink.dev');
+      expect(add.body.body).toBe('Spoke with applicant by phone.');
+
+      const bad = await http()
+        .post(`/admin/v1/shelters/${shelterId}/applications/${m5ApplicationId}/notes`)
+        .set('Cookie', devCookie)
+        .send({ body: '' });
+      expect(bad.status).toBe(400);
+
+      const list = await http()
+        .get(`/admin/v1/shelters/${shelterId}/applications/${m5ApplicationId}/notes`)
+        .set('Cookie', devCookie);
+      expect(list.status).toBe(200);
+      expect(Array.isArray(list.body.items)).toBe(true);
+      const found = list.body.items.find((n: { body: string }) => n.body === 'Spoke with applicant by phone.');
+      expect(found?.authorName).toBe('dev@kithlink.dev');
+    });
+
+    it('blocks cross-tenant staff from another shelter with 404', async () => {
+      const bEmail = `m5-staff-b-${Date.now()}@x.dev`;
+      await http().post('/app/v1/auth/register').send({ email: bEmail, password: 'Password123x' });
+      const shelterB = (await tenants.service(async sql => {
+        const s = (await sql`
+          insert into shelters (slug, name) values (${'m5-shelter-b-' + Date.now()}, 'M5 Shelter B')
+          returning id`) as unknown as { id: string }[];
+        await sql`
+          insert into staff_members (shelter_id, user_id, role)
+          select ${s[0]!.id}, u.id, 'owner'
+          from users u
+          where u.email = ${bEmail}`;
+        return s[0]!.id;
+      })) as string;
+      const bCookie = (
+        await http().post('/app/v1/auth/login').send({ email: bEmail, password: 'Password123x' })
+      ).headers['set-cookie'];
+
+      const res = await http()
+        .get(`/admin/v1/shelters/${shelterB}/applications/${m5ApplicationId}/applicant-history`)
+        .set('Cookie', bCookie);
+      expect(res.status).toBe(404);
+
+      const notesRes = await http()
+        .get(`/admin/v1/shelters/${shelterB}/applications/${m5ApplicationId}/notes`)
+        .set('Cookie', bCookie);
+      expect(notesRes.status).toBe(404);
+    });
+  });
+
   describe('M3 sites, rss, sync', () => {
     it('saves config, publishes, and serves escaped html, CURRENT, and rss', async () => {
       const save = await http()
@@ -512,6 +653,265 @@ describe.skipIf(!testUrl)('api integration', () => {
       })) as unknown as { pushed: number; failed: number; decisions_json: { decision?: string }[] }[];
       expect(runRows[0]?.pushed).toBe(available);
       expect((runRows[0]?.decisions_json ?? []).some(d => (d.decision ?? '').includes('dry-run'))).toBe(true);
+    });
+  });
+
+  describe('M5 discovery', () => {
+    let northId: string;
+    let southId: string;
+    let rexId: string;
+    let bellaId: string;
+    let avaId: string;
+    let miloId: string;
+    let goneId: string;
+
+    it('seeds geo shelters and animals with varying attributes', async () => {
+      const year = new Date().getUTCFullYear();
+      await tenants.service(async sql => {
+        const north = (await sql`
+          insert into shelters (slug, name, city, state, postal_code, latitude, longitude)
+          values ('north-shelter', 'North Shelter', 'Portland', 'OR', '97201', 45.52, -122.68)
+          on conflict (slug) do update set name = excluded.name
+          returning id`) as unknown as { id: string }[];
+        northId = north[0]!.id;
+        const south = (await sql`
+          insert into shelters (slug, name, city, state, postal_code, latitude, longitude)
+          values ('south-shelter', 'South Shelter', 'Austin', 'TX', '78701', 30.27, -97.74)
+          on conflict (slug) do update set name = excluded.name
+          returning id`) as unknown as { id: string }[];
+        southId = south[0]!.id;
+        await sql`delete from animals where shelter_id in (${northId}::uuid, ${southId}::uuid)`;
+        const insert = async (
+          shelterId: string,
+          name: string,
+          species: string,
+          breed: string | null,
+          birthYear: number | null,
+          sex: string,
+          size: string | null,
+          status: string,
+        ): Promise<string> => {
+          const rows = (await sql`
+            insert into animals (shelter_id, name, species, breed, birth_year, sex, size, status)
+            values (${shelterId}::uuid, ${name}, ${species}, ${breed}, ${birthYear}, ${sex}, ${size}, ${status})
+            returning id`) as unknown as { id: string }[];
+          return rows[0]!.id;
+        };
+        rexId = await insert(northId, 'Rex North', 'dog', 'Labrador', year - 5, 'male', 'large', 'available');
+        bellaId = await insert(northId, 'Bella North', 'cat', 'Siamese', year - 12, 'female', 'small', 'available');
+        goneId = await insert(northId, 'Gone North', 'dog', null, year - 3, 'male', 'medium', 'adopted');
+        avaId = await insert(southId, 'Ava South', 'dog', 'Poodle', year, 'female', 'small', 'available');
+        miloId = await insert(southId, 'Milo South', 'cat', null, year - 2, 'male', 'medium', 'available');
+      });
+      expect(northId).toBeTruthy();
+      expect(southId).toBeTruthy();
+    });
+
+    it('filters by species and sex across shelters', async () => {
+      const res = await http().get('/public/v1/animals?species=dog&sex=male');
+      expect(res.status).toBe(200);
+      const ids = (res.body.items as { id: string }[]).map(i => i.id);
+      expect(ids).toContain(rexId);
+      expect(ids).not.toContain(bellaId);
+      expect(ids).not.toContain(avaId);
+      for (const item of res.body.items as { species: string; sex: string }[]) {
+        expect(item.species).toBe('dog');
+        expect(item.sex).toBe('male');
+      }
+    });
+
+    it('buckets ageClass from birthYear', async () => {
+      const baby = await http().get('/public/v1/animals?shelterSlug=south-shelter&ageClass=baby');
+      expect((baby.body.items as { id: string }[]).map(i => i.id)).toEqual([avaId]);
+      const young = await http().get('/public/v1/animals?shelterSlug=south-shelter&ageClass=young');
+      expect((young.body.items as { id: string }[]).map(i => i.id)).toEqual([miloId]);
+      const adult = await http().get('/public/v1/animals?shelterSlug=north-shelter&ageClass=adult');
+      expect((adult.body.items as { id: string }[]).map(i => i.id)).toEqual([rexId]);
+      const senior = await http().get('/public/v1/animals?shelterSlug=north-shelter&ageClass=senior');
+      expect((senior.body.items as { id: string }[]).map(i => i.id)).toEqual([bellaId]);
+    });
+
+    it('matches q against breed', async () => {
+      const res = await http().get('/public/v1/animals?q=Poodle');
+      expect(res.status).toBe(200);
+      expect((res.body.items as { id: string }[]).map(i => i.id)).toEqual([avaId]);
+    });
+
+    it('applies the radius filter and returns distances', async () => {
+      const res = await http().get('/public/v1/animals?nearLat=45.52&nearLng=-122.68&radiusKm=100');
+      expect(res.status).toBe(200);
+      const items = res.body.items as { id: string; distanceKm: number | null; shelterSlug: string }[];
+      expect(items.map(i => i.id)).toContain(rexId);
+      expect(items.map(i => i.id)).not.toContain(avaId);
+      for (const item of items) {
+        expect(item.shelterSlug).not.toBe('south-shelter');
+        expect(item.distanceKm).not.toBeNull();
+      }
+    });
+
+    it('parses search responses against the contract', async () => {
+      const res = await http().get('/public/v1/animals?shelterSlug=north-shelter');
+      expect(res.status).toBe(200);
+      const parsed = animalSearchResponseSchema.parse(res.body);
+      const rex = parsed.items.find(i => i.id === rexId)!;
+      expect(rex.ageClass).toBe('adult');
+      expect(rex.shelterName).toBe('North Shelter');
+      expect(rex.shelterSlug).toBe('north-shelter');
+    });
+
+    it('serves public detail and 404s adopted animals', async () => {
+      const missing = await http().get(`/public/v1/animals/${goneId}`);
+      expect(missing.status).toBe(404);
+
+      const detail = await http().get(`/public/v1/animals/${avaId}`);
+      expect(detail.status).toBe(200);
+      expect(detail.body.shelter.slug).toBe('south-shelter');
+      expect(detail.body.shelter.city).toBe('Austin');
+      expect(detail.body.shelter.state).toBe('TX');
+      expect(detail.body.name).toBe('Ava South');
+    });
+
+    it('updates shelter profile as admin and audits it, rejecting cross-shelter edits', async () => {
+      const forbidden = await http()
+        .patch(`/admin/v1/shelters/${southId}`)
+        .set('Cookie', devCookie)
+        .send({ city: 'Dallas' });
+      expect(forbidden.status).toBe(403);
+
+      const patch = await http()
+        .patch(`/admin/v1/shelters/${shelterId}`)
+        .set('Cookie', devCookie)
+        .send({ city: 'Portland', state: 'OR', postalCode: '97205', latitude: 45.5231, longitude: -122.6765 });
+      expect(patch.status).toBe(200);
+      expect(patch.body.postalCode).toBe('97205');
+
+      const rows = (await tenants.service(async sql => {
+        return sql`select city, state, postal_code, latitude from shelters where id = ${shelterId}::uuid`;
+      })) as unknown as { city: string; state: string; postal_code: string; latitude: number }[];
+      expect(rows[0]?.city).toBe('Portland');
+      expect(rows[0]?.latitude).toBeCloseTo(45.5231, 4);
+
+      const audits = (await tenants.service(async sql => {
+        return sql`
+          select action from audit_logs
+          where action = 'shelter.updated' and entity_id = ${shelterId}
+          order by created_at desc limit 1`;
+      })) as unknown as { action: string }[];
+      expect(audits[0]?.action).toBe('shelter.updated');
+    });
+  });
+
+  describe('M5 auth recovery', () => {
+    const m5 = { email: '', resetToken: '' };
+
+    const outboxPayloadFor = async (email: string, topic: string) => {
+      const rows = (await tenants.service(async sql => {
+        return sql`
+          select payload_json from outbox_events
+          where topic = ${topic} and payload_json->'to' ? ${email}
+          order by created_at desc limit 1`;
+      })) as unknown as { payload_json: { text: string } }[];
+      return rows[0]?.payload_json.text ?? '';
+    };
+    const tokenFromUrl = (text: string, path: string) =>
+      text.match(new RegExp(`${path}\\?token=([0-9a-f]{10,200})`))?.[1] ?? '';
+
+    it('enqueues an auth.email_verify event at register', async () => {
+      m5.email = `m5-${Date.now()}@x.dev`;
+      const reg = await http().post('/app/v1/auth/register').send({ email: m5.email, password: 'Password123x' });
+      expect(reg.status).toBe(201);
+      const rows = (await tenants.service(async sql => {
+        return sql`
+          select topic from outbox_events
+          where topic = 'auth.email_verify' and payload_json->'to' ? ${m5.email}`;
+      })) as unknown as { topic: string }[];
+      expect(rows.length).toBeGreaterThan(0);
+    });
+
+    it('forgot-password for an unknown email returns 201 with no token row', async () => {
+      const ghost = `ghost-${Date.now()}@x.dev`;
+      const res = await http().post('/app/v1/auth/forgot-password').send({ email: ghost });
+      expect(res.status).toBe(201);
+      expect(res.body.ok).toBe(true);
+      const rows = (await tenants.service(async sql => {
+        return sql`
+          select t.id from password_reset_tokens t join users u on u.id = t.user_id
+          where u.email = ${ghost}`;
+      })) as unknown as { id: string }[];
+      expect(rows).toHaveLength(0);
+    });
+
+    it('forgot-password for a known email creates a token row and outbox event', async () => {
+      const res = await http().post('/app/v1/auth/forgot-password').send({ email: m5.email });
+      expect(res.status).toBe(201);
+      const tokenRows = (await tenants.service(async sql => {
+        return sql`
+          select t.token_hash from password_reset_tokens t join users u on u.id = t.user_id
+          where u.email = ${m5.email} order by t.created_at desc limit 1`;
+      })) as unknown as { token_hash: string }[];
+      expect(tokenRows[0]?.token_hash).toMatch(/^[0-9a-f]{64}$/);
+      const text = await outboxPayloadFor(m5.email, 'auth.password_reset');
+      m5.resetToken = tokenFromUrl(text, 'reset-password');
+      expect(m5.resetToken.length).toBeGreaterThanOrEqual(10);
+    });
+
+    it('reset-password invalidates old sessions and enables new-password login', async () => {
+      const staleCookie = await loginAndGetCookie(m5.email, 'Password123x');
+      const beforeMe = await http().get('/app/v1/auth/session').set('Cookie', staleCookie);
+      expect(beforeMe.status).toBe(200);
+
+      const reset = await http()
+        .post('/app/v1/auth/reset-password')
+        .send({ token: m5.resetToken, password: 'NewPassword123x' });
+      expect(reset.status).toBe(201);
+
+      const afterMe = await http().get('/app/v1/auth/session').set('Cookie', staleCookie);
+      expect(afterMe.status).toBe(401);
+
+      const oldLogin = await http().post('/app/v1/auth/login').send({ email: m5.email, password: 'Password123x' });
+      expect(oldLogin.status).toBe(401);
+      const newLogin = await http().post('/app/v1/auth/login').send({ email: m5.email, password: 'NewPassword123x' });
+      expect(newLogin.status).toBe(200);
+
+      const reuse = await http()
+        .post('/app/v1/auth/reset-password')
+        .send({ token: m5.resetToken, password: 'AnotherPass123x' });
+      expect(reuse.status).toBe(400);
+    });
+
+    it('verify-email flips users.email_verified_at', async () => {
+      const verifyToken = tokenFromUrl(
+        await outboxPayloadFor(m5.email, 'auth.email_verify'),
+        'verify-email',
+      );
+      expect(verifyToken.length).toBeGreaterThanOrEqual(10);
+      const beforeRows = (await tenants.service(async sql => {
+        return sql`select email_verified_at from users where email = ${m5.email}`;
+      })) as unknown as { email_verified_at: Date | null }[];
+      expect(beforeRows[0]?.email_verified_at).toBeNull();
+
+      const ver = await http().get(`/app/v1/auth/verify-email?token=${verifyToken}`);
+      expect(ver.status).toBe(200);
+
+      const afterRows = (await tenants.service(async sql => {
+        return sql`select email_verified_at from users where email = ${m5.email}`;
+      })) as unknown as { email_verified_at: Date | null }[];
+      expect(afterRows[0]?.email_verified_at).not.toBeNull();
+
+      const again = await http().get(`/app/v1/auth/verify-email?token=${verifyToken}`);
+      expect(again.status).toBe(400);
+    });
+
+    it('resend-verification re-enqueues for the sessioned user', async () => {
+      const cookie = await loginAndGetCookie(m5.email, 'NewPassword123x');
+      const res = await http().post('/app/v1/auth/resend-verification').set('Cookie', cookie);
+      expect(res.status).toBe(201);
+      const rows = (await tenants.service(async sql => {
+        return sql`
+          select t.id from email_verification_tokens t join users u on u.id = t.user_id
+          where u.email = ${m5.email} order by t.created_at desc limit 2`;
+      })) as unknown as { id: string }[];
+      expect(rows.length).toBe(2);
     });
   });
 });

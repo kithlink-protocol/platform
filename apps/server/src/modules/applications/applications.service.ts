@@ -1,13 +1,22 @@
 import { BadRequestException, ConflictException, Inject,
   Injectable, NotFoundException,
 } from '@nestjs/common';
+import type { AnySql } from '@kithlink/db';
 import {
   applicationCreatedResponseSchema,
   applicationListResponseSchema,
+  applicationNotesResponseSchema,
+  applicationNoteSchema,
   applicationPublicSchema,
+  applicantHistorySchema,
+  type AddApplicationNoteInput,
   type ApplicationCreatedResponse,
   type ApplicationDecisionInput,
+  type ApplicationNotesResponse,
+  type ApplicationNote,
   type ApplicationPublic,
+  type ApplicantHistory,
+  type ArtifactPublic,
   type CreateApplicationInput,
   type StaffApplicationListQuery,
 } from '@kithlink/contracts';
@@ -16,6 +25,12 @@ import { isUniqueViolation } from '../../common/db.util';
 import { AuditService } from '../../common/audit.service';
 import { TenantService } from '../db.module';
 import { OutboxService } from '../notifications/notifications.module';
+import {
+  mapArtifact,
+  selectArtifactsForApplicant,
+  selectVerificationRows,
+  type ArtifactRow,
+} from '../verifications/verifications.service';
 
 interface ApplicationRow {
   id: string;
@@ -309,6 +324,170 @@ export class ApplicationsService {
     return mapApplication(row, {
       animalName: names.animals.get(row.animal_id),
       shelterName: names.shelters.get(row.shelter_id),
+    });
+  }
+
+  private async assertApplicationInTenant(sql: AnySql, applicationId: string): Promise<void> {
+    const rows = (await sql`
+      select id from applications where id = ${applicationId}::uuid limit 1`) as unknown as {
+      id: string;
+    }[];
+    if (!rows[0]) throw new NotFoundException('Application not found');
+  }
+
+  async staffGetApplicantHistory(
+    actorId: string,
+    shelterId: string,
+    applicationId: string,
+  ): Promise<ApplicantHistory> {
+    const gathered = await this.tenants.withTenant(
+      { userId: actorId, shelterId, roleClass: 'staff' },
+      async sql => {
+        const currentRows = (await sql`
+          select ap.id, ap.applicant_id
+          from applications ap
+          where ap.id = ${applicationId}::uuid limit 1`) as unknown as {
+          id: string;
+          applicant_id: string;
+        }[];
+        const current = currentRows[0];
+        if (!current) throw new NotFoundException('Application not found');
+        const atShelter = (await sql`
+          select ap.id, ap.status, ap.submitted_at, ap.decided_at, an.name as animal_name
+          from applications ap
+          join animals an on an.id = ap.animal_id
+          where ap.applicant_id = ${current.applicant_id}::uuid
+            and ap.shelter_id = ${shelterId}::uuid
+          order by ap.submitted_at desc nulls last, ap.created_at desc, ap.id desc`) as unknown as {
+          id: string;
+          status: string;
+          animal_name: string;
+          submitted_at: Date | null;
+          decided_at: Date | null;
+        }[];
+        // RLS already gates artifacts to those covered by an active consent grant.
+        const artifacts = (await selectArtifactsForApplicant(
+          sql,
+          current.applicant_id,
+        )) as ArtifactRow[];
+        await this.audit.append(sql, actorId, shelterId, 'applicant.history_viewed', 'application', current.id, {
+          applicantId: current.applicant_id,
+        });
+        return { applicantId: current.applicant_id, atShelter, artifacts };
+      },
+    );
+
+    // Full cross-shelter provenance per artifact via service ctx.
+    const sharedArtifacts = await this.tenants.service(async sql => {
+      const out: ArtifactPublic[] = [];
+      for (const artifact of gathered.artifacts) {
+        const verifications = await selectVerificationRows(sql, artifact.id);
+        out.push(mapArtifact(artifact, verifications, shelterId));
+      }
+      return out;
+    });
+
+    const profile = await this.tenants.service(async sql => {
+      const rows = (await sql`
+        select legal_name, display_name, phone
+        from applicant_profiles where id = ${gathered.applicantId}::uuid limit 1`) as unknown as {
+        legal_name: string;
+        display_name: string | null;
+        phone: string | null;
+      }[];
+      return rows[0] ?? { legal_name: '', display_name: null, phone: null };
+    });
+
+    return applicantHistorySchema.parse({
+      profile: {
+        legalName: profile.legal_name,
+        ...(profile.display_name ? { displayName: profile.display_name } : {}),
+        ...(profile.phone ? { phone: profile.phone } : {}),
+      },
+      applicationsAtShelter: gathered.atShelter.map(a => ({
+        id: a.id,
+        animalName: a.animal_name,
+        status: a.status,
+        submittedAt: a.submitted_at
+          ? new Date(a.submitted_at as unknown as string | Date).toISOString()
+          : null,
+        decidedAt: a.decided_at
+          ? new Date(a.decided_at as unknown as string | Date).toISOString()
+          : null,
+      })),
+      sharedArtifacts,
+      generatedAt: new Date().toISOString(),
+    });
+  }
+
+  async staffListNotes(
+    actorId: string,
+    shelterId: string,
+    applicationId: string,
+  ): Promise<ApplicationNotesResponse> {
+    const rows = (await this.tenants.withTenant(
+      { userId: actorId, shelterId, roleClass: 'staff' },
+      async sql => {
+        await this.assertApplicationInTenant(sql, applicationId);
+        return sql`
+          select n.id, n.body, n.created_at, u.email as author_email
+          from application_notes n
+          left join users u on u.id = n.author_id
+          where n.application_id = ${applicationId}::uuid
+          order by n.created_at asc, n.id asc`;
+      },
+    )) as unknown as {
+      id: string;
+      body: string;
+      created_at: Date;
+      author_email: string | null;
+    }[];
+    return applicationNotesResponseSchema.parse({
+      items: rows.map(n =>
+        applicationNoteSchema.parse({
+          id: n.id,
+          authorName: n.author_email ?? null,
+          body: n.body,
+          createdAt: new Date(n.created_at as unknown as string | Date).toISOString(),
+        }),
+      ),
+    });
+  }
+
+  async staffAddNote(
+    actorId: string,
+    shelterId: string,
+    applicationId: string,
+    input: AddApplicationNoteInput,
+  ): Promise<ApplicationNote> {
+    const inserted = await this.tenants.withTenant(
+      { userId: actorId, shelterId, roleClass: 'staff' },
+      async sql => {
+        await this.assertApplicationInTenant(sql, applicationId);
+        const rows = (await sql`
+          insert into application_notes (application_id, shelter_id, author_id, body)
+          values (${applicationId}::uuid, ${shelterId}::uuid, ${actorId}::uuid, ${input.body})
+          returning id, body, created_at`) as unknown as {
+          id: string;
+          body: string;
+          created_at: Date;
+        }[];
+        await this.audit.append(sql, actorId, shelterId, 'application.note_added', 'application_note', rows[0]!.id, {});
+        return rows[0]!;
+      },
+    );
+    const authorEmail = await this.tenants.service(async sql => {
+      const rows = (await sql`
+        select email from users where id = ${actorId}::uuid limit 1`) as unknown as {
+        email: string;
+      }[];
+      return rows[0]?.email ?? null;
+    });
+    return applicationNoteSchema.parse({
+      id: inserted.id,
+      authorName: authorEmail,
+      body: inserted.body,
+      createdAt: new Date(inserted.created_at as unknown as string | Date).toISOString(),
     });
   }
 }
