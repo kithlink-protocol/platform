@@ -394,14 +394,19 @@ export class JourneysService {
     const baseRows = (await this.tenants.service(
       async sql => {
         return sql`
-          select j.id, j.status, j.animal_id
+          select j.id, j.status, j.animal_id, j.shelter_id
           from adoption_journeys j
-          where j.id = ${journeyId}::uuid and j.shelter_id = ${shelterId}::uuid
+          where j.id = ${journeyId}::uuid
           limit 1`;
       },
-    )) as unknown as { id: string; status: string; animal_id: string }[];
+    )) as unknown as { id: string; status: string; animal_id: string; shelter_id: string }[];
     const base = baseRows[0];
-    if (!base) throw new NotFoundException('Journey not found');
+    if (!base) throw new NotFoundException(`Journey ${journeyId} does not exist`);
+    if (base.shelter_id !== shelterId) {
+      throw new NotFoundException(
+        `Journey ${journeyId} belongs to shelter ${base.shelter_id}, not ${shelterId}`,
+      );
+    }
     if (base.status === 'returned') throw new ConflictException('Journey already returned');
     await this.tenants.withTenant(
       { userId: actorId, shelterId, roleClass: 'staff' },
