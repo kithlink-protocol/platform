@@ -1,6 +1,5 @@
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { createHash, randomBytes } from 'node:crypto';
-import type { AnySql } from '@kithlink/db';
 import {
   journeyActionResultSchema,
   journeyDetailSchema,
