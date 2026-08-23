@@ -2,7 +2,8 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
-import { getAnimal } from '@/lib/api';
+import { getAnimal, resolveAssetUrl } from '@/lib/api';
+import type { AnimalDetail } from '@kithlink/contracts';
 
 interface AnimalDetailPageProps {
   params: { id: string };
@@ -46,6 +47,10 @@ function ageFromBirthYear(birthYear: number | null): string | null {
   return `${years} ${years === 1 ? 'year' : 'years'}`;
 }
 
+function animalHeroPhoto(animal: AnimalDetail): AnimalDetail['photos'][number] | null {
+  return animal.photos.find(photo => photo.url !== null) ?? null;
+}
+
 export default async function AnimalDetailPage({ params }: AnimalDetailPageProps) {
   const animal = await loadAnimal(params.id);
   if (!animal) notFound();
@@ -57,6 +62,8 @@ export default async function AnimalDetailPage({ params }: AnimalDetailPageProps
   const vaccinations = Array.isArray(animal.medical.vaccinations)
     ? animal.medical.vaccinations.filter((v): v is string => typeof v === 'string')
     : [];
+
+  const hero = animalHeroPhoto(animal);
 
   const sterilized =
     Boolean(animal.medical.spayNeuter) || animal.sterilization.status === 'completed';
@@ -87,9 +94,19 @@ export default async function AnimalDetailPage({ params }: AnimalDetailPageProps
 
       <div className="detail-grid">
         <section aria-label={`${animal.name} details`}>
-          <div className="animal-photo" aria-hidden="true">
-            <span>{animal.name.charAt(0).toUpperCase()}</span>
-          </div>
+          {hero && hero.url ? (
+            <div className="animal-photo">
+              <img
+                src={resolveAssetUrl(hero.url)}
+                alt={hero.altText ?? `${animal.name} photo`}
+                loading="lazy"
+              />
+            </div>
+          ) : (
+            <div className="animal-photo" aria-hidden="true">
+              <span>{animal.name.charAt(0).toUpperCase()}</span>
+            </div>
+          )}
           <h1 className="t-title">{animal.name}</h1>
           <p>
             <span className="badge" data-status={animal.status}>

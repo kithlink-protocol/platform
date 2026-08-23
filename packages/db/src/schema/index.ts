@@ -153,6 +153,7 @@ export const animalPhotos = pgTable(
     altText: text('alt_text'),
     bytes: bigint('bytes', { mode: 'number' }),
     mime: text('mime'),
+    sha256: text('sha256'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index('animal_photos_animal_idx').on(t.animalId, t.position)],

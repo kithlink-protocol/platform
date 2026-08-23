@@ -75,8 +75,8 @@ export const animalPhotoPublicSchema = z.object({
   id: uuidSchema,
   position: z.number().int(),
   altText: z.string().nullable(),
-  /** Public CDN/bucket URL; null when photo not yet processed. */
-  url: z.string().url().nullable(),
+  /** Absolute URL or API-relative path (/public/v1/...); null when photo not yet uploaded. */
+  url: z.union([z.string().url(), z.string().regex(/^\/\S+$/)]).nullable(),
 });
 export type AnimalPhotoPublic = z.infer<typeof animalPhotoPublicSchema>;
 

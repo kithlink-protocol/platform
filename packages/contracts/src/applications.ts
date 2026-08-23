@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { cursorPageSchema, paginated, uuidSchema } from './common';
+import { staffRoleSchema } from './auth';
 import { artifactPublicSchema } from './artifacts';
 
 export const applicationStatuses = [
@@ -142,3 +143,52 @@ export const statsSchema = z.object({
   avgPlacementHours30d: z.number().nullable(),
 });
 export type Stats = z.infer<typeof statsSchema>;
+
+export const decisionTemplateSchema = z.object({
+  id: uuidSchema,
+  label: z.string(),
+  body: z.string(),
+});
+export type DecisionTemplate = z.infer<typeof decisionTemplateSchema>;
+
+export const decisionTemplatesResponseSchema = z.object({
+  items: z.array(decisionTemplateSchema),
+});
+export type DecisionTemplatesResponse = z.infer<typeof decisionTemplatesResponseSchema>;
+
+export const upsertDecisionTemplatesSchema = z.object({
+  templates: z.array(
+    z.object({
+      id: uuidSchema.optional(),
+      label: z.string().trim().min(1).max(120),
+      body: z.string().trim().min(1).max(1000),
+    }),
+  ).max(12),
+});
+export type UpsertDecisionTemplatesInput = z.infer<typeof upsertDecisionTemplatesSchema>;
+
+export const taskTemplateSchema = z.object({
+  id: uuidSchema,
+  role: staffRoleSchema,
+  title: z.string(),
+  description: z.string(),
+});
+export type TaskTemplate = z.infer<typeof taskTemplateSchema>;
+
+export const taskTemplatesResponseSchema = z.object({
+  defaults: z.array(taskTemplateSchema),
+  shelter: z.array(taskTemplateSchema),
+});
+export type TaskTemplatesResponse = z.infer<typeof taskTemplatesResponseSchema>;
+
+export const saveTaskTemplatesSchema = z.object({
+  templates: z.array(
+    z.object({
+      id: uuidSchema.optional(),
+      role: staffRoleSchema,
+      title: z.string().trim().min(1).max(160),
+      description: z.string().trim().min(1).max(1000),
+    }),
+  ).max(16),
+});
+export type SaveTaskTemplatesInput = z.infer<typeof saveTaskTemplatesSchema>;

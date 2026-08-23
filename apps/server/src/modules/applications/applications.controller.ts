@@ -5,7 +5,9 @@ import {
   createApplicationSchema,
   saveChecklistStateSchema,
   saveReviewChecklistSchema,
+  saveTaskTemplatesSchema,
   staffApplicationListQuerySchema,
+  upsertDecisionTemplatesSchema,
 } from '@kithlink/contracts';
 import { Principal } from '../../common/principal';
 import { RequireStaffRole, StaffRoleGuard } from '../../common/roles';
@@ -144,5 +146,39 @@ export class AdminShelterReviewController {
   @RequireStaffRole('viewer')
   stats(@Principal() principal: Principal, @Param('shelterId') shelterId: string) {
     return this.applications.staffGetStats(principal.user.id, shelterId);
+  }
+
+  @Get('decision-templates')
+  @RequireStaffRole('viewer')
+  getDecisionTemplates(@Principal() principal: Principal, @Param('shelterId') shelterId: string) {
+    return this.applications.staffGetDecisionTemplates(principal.user.id, shelterId);
+  }
+
+  @Put('decision-templates')
+  @RequireStaffRole('admin')
+  saveDecisionTemplates(
+    @Principal() principal: Principal,
+    @Param('shelterId') shelterId: string,
+    @Body() body: unknown,
+  ) {
+    const input = upsertDecisionTemplatesSchema.parse(body);
+    return this.applications.staffSaveDecisionTemplates(principal.user.id, shelterId, input);
+  }
+
+  @Get('task-templates')
+  @RequireStaffRole('viewer')
+  getTaskTemplates(@Principal() principal: Principal, @Param('shelterId') shelterId: string) {
+    return this.applications.staffGetTaskTemplates(principal.user.id, shelterId);
+  }
+
+  @Put('task-templates')
+  @RequireStaffRole('admin')
+  saveTaskTemplates(
+    @Principal() principal: Principal,
+    @Param('shelterId') shelterId: string,
+    @Body() body: unknown,
+  ) {
+    const input = saveTaskTemplatesSchema.parse(body);
+    return this.applications.staffSaveTaskTemplates(principal.user.id, shelterId, input);
   }
 }

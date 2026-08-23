@@ -11,6 +11,7 @@ import type {
   ArtifactWithVerifications,
   AuthSession,
   ChecklistStateEntry,
+  DecisionTemplate,
   ReviewChecklistPayload,
   StaffApplicationDetail,
 } from '@kithlink/contracts';
@@ -29,6 +30,7 @@ export default function ApplicationDetailPage() {
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [notes, setNotes] = useState<ApplicationNote[]>([]);
   const [checklist, setChecklist] = useState<ReviewChecklistPayload | null>(null);
+  const [decisionTemplates, setDecisionTemplates] = useState<DecisionTemplate[]>([]);
   const [noteBody, setNoteBody] = useState('');
   const [notePending, setNotePending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -100,11 +102,20 @@ export default function ApplicationDetailPage() {
         if (!cancelled) setChecklist(data);
       })
       .catch(() => undefined);
+    if (shelterId) {
+      apiFetch<{ items: DecisionTemplate[] }>(
+        `/admin/v1/shelters/${encodeURIComponent(shelterId)}/decision-templates`,
+      )
+        .then((data) => {
+          if (!cancelled) setDecisionTemplates(data.items);
+        })
+        .catch(() => undefined);
+    }
     refetchNotes();
     return () => {
       cancelled = true;
     };
-  }, [base, refetchNotes]);
+  }, [base, refetchNotes, shelterId]);
 
   async function addNote() {
     if (!base || noteBody.trim().length === 0) return;
@@ -140,6 +151,10 @@ export default function ApplicationDetailPage() {
     } catch {
       setError('Could not update the checklist.');
     }
+  }
+
+  function insertTemplateBody(body: string) {
+    setNoteBody((current) => (current.length > 0 ? `${current}\n${body}\n` : `${body}\n`));
   }
 
   const provenance = history
@@ -472,6 +487,25 @@ export default function ApplicationDetailPage() {
             ))}
           </ul>
         )}
+        {decisionTemplates.length > 0 ? (
+          <details className="section-gap" data-testid="decision-templates">
+            <summary className="t-label">Templates</summary>
+            <ul className="timeline">
+              {decisionTemplates.map((template) => (
+                <li key={template.id}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    data-testid={`decision-template-${template.id}`}
+                    onClick={() => insertTemplateBody(template.body)}
+                  >
+                    {template.label}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
         <textarea
           data-testid="note-input"
           aria-label="New note"

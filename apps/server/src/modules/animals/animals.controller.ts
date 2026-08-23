@@ -1,10 +1,22 @@
-import { Body, Controller, Get, Inject, NotFoundException, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
-import { addObservationSchema, animalCreateSchema, animalListQuerySchema, animalUpdateSchema } from '@kithlink/contracts';
+import { Body, Controller, Delete, Get, HttpCode, Inject, NotFoundException, Param, Patch, Post, Query, Res, UseGuards } from '@nestjs/common';
+import type { Response } from 'express';
+import {
+  addObservationSchema,
+  animalCreateSchema,
+  animalListQuerySchema,
+  animalUpdateSchema,
+  uuidSchema,
+} from '@kithlink/contracts';
 import { Principal } from '../../common/principal';
 import { RequireStaffRole, StaffRoleGuard } from '../../common/roles';
 import { SessionGuard } from '../../common/session.guard';
 import type { TenantContext } from '@kithlink/db';
-import { AnimalsService, animalPhotoInputSchema } from './animals.service';
+import {
+  AnimalsService,
+  animalPhotoInputSchema,
+  photoPresignInputSchema,
+  photoUploadCompleteSchema,
+} from './animals.service';
 
 @UseGuards(SessionGuard, StaffRoleGuard)
 @RequireStaffRole('viewer')
@@ -75,6 +87,62 @@ export class AdminAnimalsController {
     return this.animalsService.addPhoto(this.ctxOf(principal, shelterId), shelterId, id, input);
   }
 
+  @RequireStaffRole('coordinator')
+  @Post(':id/photos/presign')
+  presignPhoto(
+    @Principal() principal: Principal,
+    @Param('shelterId') shelterId: string,
+    @Param('id') id: string,
+    @Body() body: unknown,
+  ) {
+    const input = photoPresignInputSchema.parse(body);
+    return this.animalsService.presignPhoto(
+      this.ctxOf(principal, shelterId),
+      principal.user.id,
+      shelterId,
+      id,
+      input,
+    );
+  }
+
+  @RequireStaffRole('coordinator')
+  @Post(':id/photos/:photoId/upload-complete')
+  completePhotoUpload(
+    @Principal() principal: Principal,
+    @Param('shelterId') shelterId: string,
+    @Param('id') id: string,
+    @Param('photoId') photoId: string,
+    @Body() body: unknown,
+  ) {
+    const input = photoUploadCompleteSchema.parse(body);
+    return this.animalsService.completePhotoUpload(
+      this.ctxOf(principal, shelterId),
+      principal.user.id,
+      shelterId,
+      id,
+      photoId,
+      input,
+    );
+  }
+
+  @RequireStaffRole('coordinator')
+  @HttpCode(204)
+  @Delete(':id/photos/:photoId')
+  async deletePhoto(
+    @Principal() principal: Principal,
+    @Param('shelterId') shelterId: string,
+    @Param('id') id: string,
+    @Param('photoId') photoId: string,
+  ): Promise<void> {
+    await this.animalsService.deletePhoto(
+      this.ctxOf(principal, shelterId),
+      principal.user.id,
+      shelterId,
+      id,
+      photoId,
+    );
+  }
+
   @Post(':id/observations')
   addObservation(
     @Principal() principal: Principal,
@@ -120,5 +188,20 @@ export class AdminSterilizationController {
     @Param('shelterId') shelterId: string,
   ) {
     return this.animalsService.sterilizationSummary(this.ctxOf(principal, shelterId), shelterId);
+  }
+}
+
+@Controller('public/v1/animal-photos')
+export class PublicAnimalPhotosController {
+  constructor(
+    @Inject(AnimalsService) private readonly animalsService: AnimalsService,
+  ) {}
+
+  @Get(':photoId')
+  async stream(@Param('photoId') photoId: string, @Res() res: Response): Promise<void> {
+    uuidSchema.parse(photoId);
+    const { buffer, mime } = await this.animalsService.streamPhoto(photoId);
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    res.type(mime).send(buffer);
   }
 }

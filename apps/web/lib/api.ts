@@ -18,6 +18,10 @@ const API_URL = process.env.API_URL ?? 'http://localhost:4000';
 
 export class ApiError extends Error {}
 
+export function resolveAssetUrl(path: string): string {
+  return /^https?:\/\//.test(path) ? path : `${API_URL}${path}`;
+}
+
 async function fetchJson<T>(path: string): Promise<T> {
   let res: Response;
   try {

@@ -1,12 +1,14 @@
 import { z } from 'zod';
+import { randomUUID } from 'node:crypto';
 import { and, eq } from 'drizzle-orm';
-import { BadRequestException, Injectable, NotFoundException,
+import { BadRequestException, ConflictException, Injectable, NotFoundException,
   Inject,
 } from '@nestjs/common';
 import {
   ageToAgeClass,
   animalDetailSchema,
   animalListResponseSchema,
+  animalPhotoPublicSchema,
   animalPublicSchema,
   animalSearchItemSchema,
   animalSearchResponseSchema,
@@ -30,6 +32,8 @@ import { AuditService } from '../../common/audit.service';
 import { isCheckViolation, isForeignKeyViolation } from '../../common/db.util';
 import { OutboxService } from '../notifications/notifications.module';
 import { TenantService } from '../db.module';
+import { S3Service } from '../s3/s3.module';
+import { CryptoUtil } from '../../common/crypto.util';
 
 // No photo-metadata input schema exists in contracts yet; kept server-local until promoted.
 export const animalPhotoInputSchema = z.object({
@@ -40,6 +44,40 @@ export const animalPhotoInputSchema = z.object({
   bytes: z.number().int().nonnegative().nullish(),
 });
 export type AnimalPhotoInput = z.infer<typeof animalPhotoInputSchema>;
+
+export const PHOTO_ALLOWED_MIMES = ['image/jpeg', 'image/png', 'image/webp'] as const;
+export const PHOTO_MIME_EXTENSIONS: Record<(typeof PHOTO_ALLOWED_MIMES)[number], string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+};
+export function photoExtensionFor(mime: string): string | null {
+  return (PHOTO_MIME_EXTENSIONS as Record<string, string | undefined>)[mime] ?? null;
+}
+export const PHOTO_MAX_BYTES = 8_388_608;
+
+export const photoPresignInputSchema = z.object({
+  mime: z.string(),
+  bytes: z.number().int().positive().max(PHOTO_MAX_BYTES),
+});
+export type PhotoPresignInput = z.infer<typeof photoPresignInputSchema>;
+
+export const photoUploadCompleteSchema = z.object({
+  sha256: z.string().regex(/^[0-9a-fA-F]{64}$/),
+});
+export type PhotoUploadCompleteInput = z.infer<typeof photoUploadCompleteSchema>;
+
+export const photoPresignResponseSchema = z.object({
+  photoId: z.string().uuid(),
+  uploadUrl: z.string().url(),
+  key: z.string().min(1),
+  expiresIn: z.number().int().positive(),
+});
+export type PhotoPresignResponse = z.infer<typeof photoPresignResponseSchema>;
+
+function buildPhotoUrl(photoId: string): string {
+  return `${process.env.PUBLIC_ASSET_BASE ?? ''}/public/v1/animal-photos/${photoId}`;
+}
 
 export interface AnimalPageQuery {
   cursor?: string;
@@ -72,6 +110,7 @@ interface PhotoRawRow {
   animal_id: string;
   position: number;
   alt_text: string | null;
+  bytes: number | null;
 }
 
 function mapSterilization(row: Pick<
@@ -103,7 +142,12 @@ function animalCore(row: AnimalRawRow, photos: PhotoRawRow[]) {
     medical: row.medical_json ?? {},
     traits: row.traits_json ?? {},
     sterilization: mapSterilization(row),
-    photos: photos.map(p => ({ id: p.id, position: p.position, altText: p.alt_text ?? null, url: null })),
+    photos: photos.map(p => ({
+      id: p.id,
+      position: p.position,
+      altText: p.alt_text ?? null,
+      url: p.bytes === null ? null : buildPhotoUrl(p.id),
+    })),
     createdAt: new Date(row.created_at as unknown as string | Date).toISOString(),
   };
 }
@@ -149,6 +193,8 @@ export class AnimalsService {
   constructor(
     @Inject(TenantService) private readonly tenants: TenantService,
     @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(S3Service) private readonly s3: S3Service,
+    @Inject(CryptoUtil) private readonly crypto: CryptoUtil,
   ) {}
 
   async list(
@@ -541,10 +587,154 @@ export class AnimalsService {
     });
   }
 
+  async presignPhoto(
+    ctx: TenantContext,
+    actorId: string,
+    shelterId: string,
+    animalId: string,
+    input: PhotoPresignInput,
+  ): Promise<PhotoPresignResponse> {
+    if (photoExtensionFor(input.mime) === null) {
+      throw new BadRequestException('Unsupported image type');
+    }
+    return this.tenants.withTenant(ctx, async sql => {
+      const existing = (await sql`
+        select id from animals
+        where id = ${animalId}::uuid and shelter_id = ${shelterId}::uuid
+        limit 1`) as unknown as { id: string }[];
+      if (!existing[0]) throw new NotFoundException('Animal not found');
+      const key = `animal-photos/${animalId}/${randomUUID()}.${photoExtensionFor(input.mime)}`;
+      const inserted = (await sql`
+        insert into animal_photos (animal_id, storage_key, position, mime)
+        values (${animalId}::uuid, ${key}, 0, ${input.mime})
+        returning id`) as unknown as { id: string }[];
+      const photoId = inserted[0]!.id;
+      await this.audit.append(sql, actorId, shelterId, 'animal.photo_presigned', 'animal_photo', photoId, {
+        animalId,
+        mime: input.mime,
+      });
+      const presigned = await this.s3.presignPut(key, input.mime, input.bytes, 600);
+      return photoPresignResponseSchema.parse({
+        photoId,
+        uploadUrl: presigned.url,
+        key,
+        expiresIn: 600,
+      });
+    });
+  }
+
+  async completePhotoUpload(
+    ctx: TenantContext,
+    actorId: string,
+    shelterId: string,
+    animalId: string,
+    photoId: string,
+    input: PhotoUploadCompleteInput,
+  ): Promise<AnimalPhotoPublic> {
+    return this.tenants.withTenant(ctx, async sql => {
+      const rows = (await sql`
+        select p.id, p.position, p.storage_key, p.alt_text
+        from animal_photos p
+        join animals a on a.id = p.animal_id
+        where p.id = ${photoId}::uuid and a.id = ${animalId}::uuid and a.shelter_id = ${shelterId}::uuid
+        limit 1`) as unknown as {
+        id: string;
+        position: number;
+        storage_key: string;
+        alt_text: string | null;
+      }[];
+      const row = rows[0];
+      if (!row) throw new NotFoundException('Photo not found');
+      const head = await this.s3.head(row.storage_key);
+      let actualSha: string | null = null;
+      if (head && head.bytes > 0 && head.bytes <= PHOTO_MAX_BYTES) {
+        actualSha = this.crypto.sha256Hex(await this.s3.get(row.storage_key));
+      }
+      if (head === null || actualSha === null || actualSha !== input.sha256.toLowerCase()) {
+        await this.s3.delete(row.storage_key).catch(() => undefined);
+        throw new ConflictException('Uploaded object missing or sha256 mismatch');
+      }
+      let position = row.position;
+      if (position === 0) {
+        const maxRows = (await sql`
+          select coalesce(max(position), 0)::int as max_position
+          from animal_photos
+          where animal_id = ${animalId}::uuid and id <> ${photoId}::uuid`) as unknown as {
+          max_position: number;
+        }[];
+        position = (maxRows[0]?.max_position ?? 0) + 1;
+      }
+      const updated = (await sql`
+        update animal_photos
+        set bytes = ${head.bytes}, sha256 = ${actualSha}, position = ${position}
+        where id = ${photoId}::uuid
+        returning id, position, alt_text`) as unknown as {
+        id: string;
+        position: number;
+        alt_text: string | null;
+      }[];
+      const photo = updated[0]!;
+      await this.audit.append(sql, actorId, shelterId, 'animal.photo_uploaded', 'animal_photo', photo.id, {
+        animalId,
+        bytes: head.bytes,
+        sha256: actualSha,
+      });
+      return animalPhotoPublicSchema.parse({
+        id: photo.id,
+        position: photo.position,
+        altText: photo.alt_text ?? null,
+        url: buildPhotoUrl(photo.id),
+      });
+    });
+  }
+
+  async deletePhoto(
+    ctx: TenantContext,
+    actorId: string,
+    shelterId: string,
+    animalId: string,
+    photoId: string,
+  ): Promise<void> {
+    await this.tenants.withTenant(ctx, async sql => {
+      const rows = (await sql`
+        select p.storage_key
+        from animal_photos p
+        join animals a on a.id = p.animal_id
+        where p.id = ${photoId}::uuid and a.id = ${animalId}::uuid and a.shelter_id = ${shelterId}::uuid
+        limit 1`) as unknown as { storage_key: string }[];
+      const row = rows[0];
+      if (!row) throw new NotFoundException('Photo not found');
+      await sql`delete from animal_photos where id = ${photoId}::uuid`;
+      await this.audit.append(sql, actorId, shelterId, 'animal.photo_deleted', 'animal_photo', photoId, {
+        animalId,
+      });
+      await this.s3.delete(row.storage_key).catch(() => undefined);
+    });
+  }
+
+  async streamPhoto(photoId: string): Promise<{ buffer: Buffer; mime: string }> {
+    return this.tenants.service(async sql => {
+      const rows = (await sql`
+        select storage_key, mime
+        from animal_photos
+        where id = ${photoId}::uuid
+        limit 1`) as unknown as { storage_key: string; mime: string | null }[];
+      const row = rows[0];
+      if (!row) throw new NotFoundException('Photo not found');
+      let buffer: Buffer;
+      try {
+        buffer = await this.s3.get(row.storage_key);
+      } catch {
+        throw new NotFoundException('Photo object not found');
+      }
+      return { buffer, mime: row.mime ?? 'application/octet-stream' };
+    });
+  }
+
   private async loadPhotos(sql: AnySql, animalIds: string[]): Promise<Map<string, PhotoRawRow[]>> {
     if (animalIds.length === 0) return new Map();
     const rows = (await sql`
-      select id, animal_id, position, alt_text
+      select id, animal_id, position, alt_text, bytes
       from animal_photos
       where animal_id = any(${animalIds}::uuid[])
       order by animal_id, position`) as unknown as PhotoRawRow[];

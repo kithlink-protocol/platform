@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
 
 import { ApiError, apiFetch } from '@/lib/api';
 import {
@@ -24,6 +24,20 @@ const FAS_LABELS: Record<number, string> = {
 function formatDay(value: string): string {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toISOString().slice(0, 10);
+}
+
+const ALLOWED_PHOTO_MIMES = ['image/jpeg', 'image/png', 'image/webp'];
+const PHOTO_MAX_BYTES = 8_388_608;
+
+async function sha256Hex(file: File): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
+  return Array.from(new Uint8Array(digest))
+    .map(byte => byte.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+function photoSrc(url: string): string {
+  return url.startsWith('/') ? `/api${url}` : url;
 }
 
 export default function AnimalDetailPage() {
@@ -48,6 +62,10 @@ export default function AnimalDetailPage() {
   const [sterilSaving, setSterilSaving] = useState(false);
   const [sterilError, setSterilError] = useState<string | null>(null);
   const [sterilSavedAt, setSterilSavedAt] = useState<string | null>(null);
+
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const [deletingPhotoId, setDeletingPhotoId] = useState<string | null>(null);
 
   function hydrateSterilization(data: AnimalPublic) {
     setSterilStatus(data.sterilization.status);
@@ -110,6 +128,72 @@ export default function AnimalDetailPage() {
   useEffect(() => {
     loadObservations();
   }, [loadObservations]);
+
+  const refreshAnimal = useCallback(async () => {
+    if (!shelterId || !animalId) return;
+    try {
+      const data = await apiFetch<AnimalPublic>(
+        `/admin/v1/shelters/${encodeURIComponent(shelterId)}/animals/${encodeURIComponent(animalId)}`,
+      );
+      setAnimal(data);
+    } catch {
+      return;
+    }
+  }, [shelterId, animalId]);
+
+  async function handlePhotoSelected(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file || !shelterId || !animalId || photoUploading) return;
+    setPhotoUploading(true);
+    setPhotoError(null);
+    try {
+      if (!ALLOWED_PHOTO_MIMES.includes(file.type)) {
+        throw new ApiError('Only JPEG, PNG, or WebP images are supported.', 400);
+      }
+      if (file.size < 1 || file.size > PHOTO_MAX_BYTES) {
+        throw new ApiError('Photos must be between 1 byte and 8 MB.', 400);
+      }
+      const base = `/admin/v1/shelters/${encodeURIComponent(shelterId)}/animals/${encodeURIComponent(animalId)}/photos`;
+      const presign = await apiFetch<{ photoId: string; uploadUrl: string }>(`${base}/presign`, {
+        method: 'POST',
+        body: JSON.stringify({ mime: file.type, bytes: file.size }),
+      });
+      const put = await fetch(presign.uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': file.type },
+        body: file,
+      });
+      if (!put.ok) throw new ApiError('Could not store the photo upload.', put.status);
+      const sha256 = await sha256Hex(file);
+      await apiFetch(`${base}/${encodeURIComponent(presign.photoId)}/upload-complete`, {
+        method: 'POST',
+        body: JSON.stringify({ sha256 }),
+      });
+      await refreshAnimal();
+    } catch (err: unknown) {
+      setPhotoError(err instanceof Error ? err.message : 'Could not upload the photo.');
+    } finally {
+      setPhotoUploading(false);
+    }
+  }
+
+  async function deletePhoto(photoId: string) {
+    if (!shelterId || !animalId || deletingPhotoId !== null) return;
+    setDeletingPhotoId(photoId);
+    setPhotoError(null);
+    try {
+      await apiFetch(
+        `/admin/v1/shelters/${encodeURIComponent(shelterId)}/animals/${encodeURIComponent(animalId)}/photos/${encodeURIComponent(photoId)}`,
+        { method: 'DELETE' },
+      );
+      await refreshAnimal();
+    } catch (err: unknown) {
+      setPhotoError(err instanceof Error ? err.message : 'Could not delete the photo.');
+    } finally {
+      setDeletingPhotoId(null);
+    }
+  }
 
   function toggleTag(tag: string) {
     setSelectedTags(prev => {
@@ -213,6 +297,59 @@ export default function AnimalDetailPage() {
           <p>Loading…</p>
         )}
       </header>
+
+      <section aria-labelledby="photos-heading" className="section-gap card">
+        <h2 id="photos-heading" className="card-title">
+          Photos
+        </h2>
+        <label htmlFor="photo-input">Add photo</label>
+        <input
+          id="photo-input"
+          data-testid="photo-input"
+          type="file"
+          accept="image/*"
+          disabled={photoUploading}
+          onChange={handlePhotoSelected}
+        />
+        {photoUploading ? (
+          <p role="status" className="muted t-caption">
+            Uploading photo…
+          </p>
+        ) : null}
+        {photoError ? (
+          <p role="alert" className="alert alert-danger">
+            {photoError}
+          </p>
+        ) : null}
+        {animal && animal.photos.length > 0 ? (
+          <ul className="btn-row section-gap">
+            {animal.photos.map(photo => (
+              <li key={photo.id} data-testid="photo-thumb">
+                {photo.url ? (
+                  <img
+                    src={photoSrc(photo.url)}
+                    alt={photo.altText ?? `${animal.name} photo`}
+                    loading="lazy"
+                  />
+                ) : (
+                  <span className="badge">Pending…</span>
+                )}
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  data-testid="photo-delete"
+                  disabled={deletingPhotoId !== null || photoUploading}
+                  onClick={() => deletePhoto(photo.id)}
+                >
+                  Delete
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="muted">No photos yet.</p>
+        )}
+      </section>
 
       <section aria-labelledby="sterilization-heading" className="section-gap card">
         <h2 id="sterilization-heading" className="card-title">

@@ -9,8 +9,10 @@ import {
   applicationNoteSchema,
   applicationPublicSchema,
   applicantHistorySchema,
+  decisionTemplateSchema,
   reviewChecklistPayloadSchema,
   statsSchema,
+  taskTemplateSchema,
   type AddApplicationNoteInput,
   type ApplicationCreatedResponse,
   type ApplicationDecisionInput,
@@ -20,11 +22,15 @@ import {
   type ApplicantHistory,
   type ArtifactPublic,
   type CreateApplicationInput,
+  type DecisionTemplatesResponse,
   type ReviewChecklistPayload,
   type SaveChecklistStateInput,
   type SaveReviewChecklistInput,
+  type SaveTaskTemplatesInput,
   type StaffApplicationListQuery,
   type Stats,
+  type TaskTemplatesResponse,
+  type UpsertDecisionTemplatesInput,
 } from '@kithlink/contracts';
 import { decodeCursor, encodeCursor } from '../../common/cursor.util';
 import { isUniqueViolation } from '../../common/db.util';
@@ -692,5 +698,129 @@ export class ApplicationsService {
       avgPlacementHours30d:
         row.avg_placement_hours_30d === null ? null : Number(row.avg_placement_hours_30d),
     });
+  }
+
+  async staffGetDecisionTemplates(
+    actorId: string,
+    shelterId: string,
+  ): Promise<DecisionTemplatesResponse> {
+    const rows = await this.tenants.withTenant(
+      { userId: actorId, shelterId, roleClass: 'staff' },
+      async sql =>
+        (await sql`
+          select id, label, body
+          from decision_templates
+          where shelter_id = ${shelterId}::uuid
+          order by created_at asc, id asc`) as unknown as {
+          id: string;
+          label: string;
+          body: string;
+        }[],
+    );
+    return { items: rows.map(r => decisionTemplateSchema.parse(r)) };
+  }
+
+  async staffSaveDecisionTemplates(
+    actorId: string,
+    shelterId: string,
+    input: UpsertDecisionTemplatesInput,
+  ): Promise<DecisionTemplatesResponse> {
+    const items = await this.tenants.service(async sql => {
+      const shelters = (await sql`
+        select id from shelters where id = ${shelterId}::uuid limit 1`) as unknown as {
+        id: string;
+      }[];
+      if (!shelters[0]) throw new NotFoundException('Shelter not found');
+      // Replace-all semantics like the review checklist; ids stay stable for kept labels.
+      const labels = input.templates.map(t => t.label);
+      await sql`
+        delete from decision_templates
+        where shelter_id = ${shelterId}::uuid
+          and not (label = any(${labels.length ? labels : ['']}::text[]))`;
+      for (const template of input.templates) {
+        const existing = (await sql`
+          select id from decision_templates
+          where shelter_id = ${shelterId}::uuid and label = ${template.label}
+          limit 1`) as unknown as { id: string }[];
+        if (existing[0]) {
+          await sql`
+            update decision_templates set label = ${template.label}, body = ${template.body}
+            where id = ${existing[0].id}::uuid`;
+        } else {
+          await sql`
+            insert into decision_templates (shelter_id, label, body)
+            values (${shelterId}::uuid, ${template.label}, ${template.body})`;
+        }
+      }
+      const rows = (await sql`
+        select id, label, body
+        from decision_templates
+        where shelter_id = ${shelterId}::uuid
+        order by created_at asc, id asc`) as unknown as {
+        id: string;
+        label: string;
+        body: string;
+      }[];
+      await this.audit.append(sql, actorId, shelterId, 'decision_templates.updated', 'decision_template', shelterId, {
+        labels,
+      });
+      return rows;
+    });
+    return { items: items.map(r => decisionTemplateSchema.parse(r)) };
+  }
+
+  async staffGetTaskTemplates(actorId: string, shelterId: string): Promise<TaskTemplatesResponse> {
+    const rows = await this.tenants.withTenant(
+      { userId: actorId, shelterId, roleClass: 'staff' },
+      async sql =>
+        (await sql`
+          select id, shelter_id, role, title, description
+          from task_templates
+          where shelter_id is null or shelter_id = ${shelterId}::uuid
+          order by position asc, created_at asc, id asc`) as unknown as {
+          id: string;
+          shelter_id: string | null;
+          role: string;
+          title: string;
+          description: string;
+        }[],
+    );
+    return {
+      defaults: rows
+        .filter(r => r.shelter_id === null)
+        .map(r => taskTemplateSchema.parse({ id: r.id, role: r.role, title: r.title, description: r.description })),
+      shelter: rows
+        .filter(r => r.shelter_id !== null)
+        .map(r => taskTemplateSchema.parse({ id: r.id, role: r.role, title: r.title, description: r.description })),
+    };
+  }
+
+  async staffSaveTaskTemplates(
+    actorId: string,
+    shelterId: string,
+    input: SaveTaskTemplatesInput,
+  ): Promise<TaskTemplatesResponse> {
+    await this.tenants.service(async sql => {
+      const shelters = (await sql`
+        select id from shelters where id = ${shelterId}::uuid limit 1`) as unknown as {
+        id: string;
+      }[];
+      if (!shelters[0]) throw new NotFoundException('Shelter not found');
+      // Replace-all for SHELTER-SPECIFIC rows only; platform defaults are never touched.
+      await sql`
+        delete from task_templates where shelter_id = ${shelterId}::uuid`;
+      for (const [position, template] of input.templates.entries()) {
+        await sql`
+          insert into task_templates (shelter_id, role, title, description, position)
+          values (${shelterId}::uuid, ${template.role}::staff_role, ${template.title}, ${template.description}, ${position})`;
+      }
+      const current = (await sql`
+        select id from task_templates where shelter_id is null limit 1`) as unknown as { id: string }[];
+      await this.audit.append(sql, actorId, shelterId, 'task_templates.updated', 'task_template', shelterId, {
+        titles: input.templates.map(t => t.title),
+        platformRows: current.length > 0,
+      });
+    });
+    return this.staffGetTaskTemplates(actorId, shelterId);
   }
 }

@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 
-import { ApiError, getShelter, listShelterAnimals } from '@/lib/api';
+import { ApiError, getShelter, listShelterAnimals, resolveAssetUrl } from '@/lib/api';
 import type { AnimalPublic, ShelterDetail } from '@kithlink/contracts';
 
 interface ShelterPageProps {
@@ -47,8 +47,8 @@ function animalMetaLine(animal: AnimalPublic): string {
     .join(' · ');
 }
 
-function animalPhotoUrl(animal: AnimalPublic): string | null {
-  return animal.photos.map(photo => photo.url).find(url => url !== null) ?? null;
+function animalHeroPhoto(animal: AnimalPublic): AnimalPublic['photos'][number] | null {
+  return animal.photos.find(photo => photo.url !== null) ?? null;
 }
 
 export default async function ShelterDetailPage({ params }: ShelterPageProps) {
@@ -97,43 +97,46 @@ export default async function ShelterDetailPage({ params }: ShelterPageProps) {
           <div className="empty-state">No animals available.</div>
         ) : (
           <ul className="grid-cards section-gap">
-            {animals.map((animal) => (
-              <li key={animal.id}>
-                <article className="card" data-testid="animal-card">
-                  {animalPhotoUrl(animal) ? (
-                    <div className="animal-photo">
-                      <img
-                        src={animalPhotoUrl(animal) as string}
-                        alt={`${animal.name} photo`}
-                        loading="lazy"
-                      />
-                    </div>
-                  ) : (
-                    <div className="animal-photo" aria-hidden="true">
-                      <span>{animal.species.charAt(0).toUpperCase()}</span>
-                    </div>
-                  )}
-                  <h3 className="card-title">{animal.name}</h3>
-                  <p className="t-meta">{animalMetaLine(animal)}</p>
-                  <p>
-                    <span className="badge" data-status={animal.status}>
-                      {animal.status}
-                    </span>
-                  </p>
-                  {animal.status === 'available' ? (
+            {animals.map((animal) => {
+              const hero = animalHeroPhoto(animal);
+              return (
+                <li key={animal.id}>
+                  <article className="card" data-testid="animal-card">
+                    {hero && hero.url ? (
+                      <div className="animal-photo">
+                        <img
+                          src={resolveAssetUrl(hero.url)}
+                          alt={hero.altText ?? `${animal.name} photo`}
+                          loading="lazy"
+                        />
+                      </div>
+                    ) : (
+                      <div className="animal-photo" aria-hidden="true">
+                        <span>{animal.species.charAt(0).toUpperCase()}</span>
+                      </div>
+                    )}
+                    <h3 className="card-title">{animal.name}</h3>
+                    <p className="t-meta">{animalMetaLine(animal)}</p>
                     <p>
-                      <Link
-                        className="btn btn-primary btn-sm"
-                        data-testid="apply-link"
-                        href={`/apply/${animal.id}`}
-                      >
-                        Apply
-                      </Link>
+                      <span className="badge" data-status={animal.status}>
+                        {animal.status}
+                      </span>
                     </p>
-                  ) : null}
-                </article>
-              </li>
-            ))}
+                    {animal.status === 'available' ? (
+                      <p>
+                        <Link
+                          className="btn btn-primary btn-sm"
+                          data-testid="apply-link"
+                          href={`/apply/${animal.id}`}
+                        >
+                          Apply
+                        </Link>
+                      </p>
+                    ) : null}
+                  </article>
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>
