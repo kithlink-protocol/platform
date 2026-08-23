@@ -143,6 +143,10 @@ jobs:
             sleep 2
           done
           [ "$ok" = 1 ]
+      - name: Seed demo data
+        run: pnpm --filter @kithlink/server exec tsx scripts/seed.ts
+        env:
+          DATABASE_URL: postgres://kithlink_app:kithlink_app_dev@localhost:5432/kithlink
       - name: Install Playwright browsers
         run: pnpm --filter @kithlink/e2e exec playwright install --with-deps chromium
       - name: Build workspace libraries
