@@ -111,6 +111,39 @@ export const animalSearchItemSchema = animalPublicSchema.extend({
 export type AnimalSearchItem = z.infer<typeof animalSearchItemSchema>;
 export const animalSearchResponseSchema = paginated(animalSearchItemSchema);
 
+export const OBSERVATION_TAGS = [
+  'playful',
+  'fearful',
+  'reactive',
+  'calm',
+  'curious',
+  'vocal',
+  'snuggly',
+  'independent',
+] as const;
+export type ObservationTag = (typeof OBSERVATION_TAGS)[number];
+
+/** Anon-safe behavior snapshot: never carries author identity. */
+export const behaviorObservationSchema = z.object({
+  id: uuidSchema,
+  fasScore: z.number().int().min(0).max(4).nullable(),
+  tags: z.array(z.enum(OBSERVATION_TAGS)),
+  note: z.string().max(1000).nullable(),
+  createdAt: z.string().datetime(),
+});
+export type BehaviorObservation = z.infer<typeof behaviorObservationSchema>;
+
+export const addObservationSchema = z
+  .object({
+    fasScore: z.number().int().min(0).max(4).nullish(),
+    tags: z.array(z.enum(OBSERVATION_TAGS)).max(4).default([]),
+    note: z.string().max(1000).nullish(),
+  })
+  .refine(input => input.fasScore != null || (input.note ?? '').length > 0, {
+    message: 'An observation needs a stress score or a note',
+  });
+export type AddObservationInput = z.infer<typeof addObservationSchema>;
+
 export const animalDetailSchema = animalPublicSchema.extend({
   shelter: z.object({
     name: z.string(),
@@ -118,5 +151,6 @@ export const animalDetailSchema = animalPublicSchema.extend({
     city: z.string().nullable(),
     state: z.string().nullable(),
   }),
+  observations: z.array(behaviorObservationSchema).max(20).default([]),
 });
 export type AnimalDetail = z.infer<typeof animalDetailSchema>;

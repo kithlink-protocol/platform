@@ -137,7 +137,7 @@ export class SitesService {
     };
     const buildId = randomUUID();
     const base = `sites/${site.slug}/builds/${buildId}`;
-    await this.s3.put(`${base}/index.html`, Buffer.from(renderIndexHtml(cfg), 'utf8'), 'text/html; charset=utf-8');
+    await this.s3.put(`${base}/index.html`, Buffer.from(renderIndexHtml({ ...cfg, buildId }), 'utf8'), 'text/html; charset=utf-8');
     await this.s3.put(`${base}/animals.html`, Buffer.from(renderAnimalsHtml(cfg), 'utf8'), 'text/html; charset=utf-8');
     await this.s3.put(`${base}/sitemap.txt`, Buffer.from(renderSitemapTxt(site.slug), 'utf8'), 'text/plain; charset=utf-8');
     await this.s3.put(`${base}/llms.txt`, Buffer.from(renderLlmsTxt(cfg), 'utf8'), 'text/plain; charset=utf-8');

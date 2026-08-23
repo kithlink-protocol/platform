@@ -18,6 +18,7 @@ export interface RenderConfig {
   heroBody: string;
   brand: RenderBrand;
   animals: RenderAnimal[];
+  buildId?: string;
 }
 
 const ESCAPES: Record<string, string> = {
@@ -109,6 +110,7 @@ function layout(
     '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n' +
     '<meta name="viewport" content="width=device-width, initial-scale=1">\n' +
     '<title>' + esc(title) + '</title>' + themeColor +
+    (cfg.buildId ? '\n<meta name="kithlink-build" content="' + esc(cfg.buildId) + '">' : '') +
     '\n<style>' + STYLE + '</style>\n' + headExtra + '\n</head>\n<body>\n' +
     '<header class="site-header">\n<div class="wrap">\n' +
     '<nav class="site-nav" aria-label="Site"><a href="/index.html">Home</a><a href="/animals.html">Animals</a></nav>\n' +

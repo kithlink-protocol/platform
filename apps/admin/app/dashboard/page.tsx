@@ -1,18 +1,17 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 import { ApiError, apiFetch } from '@/lib/api';
 import type {
   AnimalPublic,
-  ApplicationPublic,
   AuthSession,
   Membership,
   SiteConfigResponse,
+  Stats,
 } from '@kithlink/contracts';
-
-const OPEN_STATUSES = new Set(['draft', 'submitted', 'in_review', 'info_requested']);
 
 function formatDay(value: string | null): string {
   if (!value) return '—';
@@ -27,7 +26,7 @@ export default function DashboardPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [animals, setAnimals] = useState<AnimalPublic[] | null>(null);
   const [animalsError, setAnimalsError] = useState<string | null>(null);
-  const [applications, setApplications] = useState<ApplicationPublic[] | null>(null);
+  const [stats, setStats] = useState<Stats | null>(null);
   const [sitePublishedAt, setSitePublishedAt] = useState<string | null>(null);
 
   useEffect(() => {
@@ -62,7 +61,7 @@ export default function DashboardPage() {
     let cancelled = false;
     setAnimals(null);
     setAnimalsError(null);
-    setApplications(null);
+    setStats(null);
     setSitePublishedAt(null);
     apiFetch<{ items: AnimalPublic[] }>(
       `/admin/v1/shelters/${encodeURIComponent(selectedId)}/animals?limit=25`,
@@ -76,11 +75,9 @@ export default function DashboardPage() {
           err instanceof Error ? err.message : 'Could not load animals.',
         );
       });
-    apiFetch<{ items: ApplicationPublic[] }>(
-      `/admin/v1/shelters/${encodeURIComponent(selectedId)}/applications?limit=50`,
-    )
+    apiFetch<Stats>(`/admin/v1/shelters/${encodeURIComponent(selectedId)}/stats`)
       .then((data) => {
-        if (!cancelled) setApplications(data.items);
+        if (!cancelled) setStats(data);
       })
       .catch(() => undefined);
     apiFetch<SiteConfigResponse>(
@@ -118,11 +115,14 @@ export default function DashboardPage() {
       (membership: Membership) => membership.shelterId === selectedId,
     ) ?? null;
 
-  const availableCount =
-    animals?.filter((animal) => animal.status === 'available').length ?? 0;
-  const openApplicationsCount =
-    applications?.filter((application) => OPEN_STATUSES.has(application.status))
-      .length ?? 0;
+  const availableCount = stats?.animalsAvailable ?? null;
+  const openApplicationsCount = stats?.openApplications ?? null;
+  const velocity =
+    stats == null
+      ? null
+      : stats.avgPlacementHours30d === null
+        ? '\u2014'
+        : `${stats.avgPlacementHours30d.toFixed(1)}h`;
 
   return (
     <main>
@@ -132,13 +132,17 @@ export default function DashboardPage() {
       </header>
 
       <div className="stat-row">
-        <div className="card stat">
-          <span className="stat-value">{availableCount}</span>
+        <div className="card stat" data-testid="stat-animals-available">
+          <span className="stat-value">{availableCount ?? '\u2014'}</span>
           <span className="stat-label">Animals available</span>
         </div>
-        <div className="card stat">
-          <span className="stat-value">{openApplicationsCount}</span>
+        <div className="card stat" data-testid="stat-open-applications">
+          <span className="stat-value">{openApplicationsCount ?? '\u2014'}</span>
           <span className="stat-label">Open applications</span>
+        </div>
+        <div className="card stat" data-testid="stat-velocity">
+          <span className="stat-value">{velocity ?? '\u2014'}</span>
+          <span className="stat-label">Avg placement (30d)</span>
         </div>
         <div className="card stat">
           <span className="stat-value">{formatDay(sitePublishedAt)}</span>
@@ -200,8 +204,12 @@ export default function DashboardPage() {
               </thead>
               <tbody>
                 {animals.map((animal) => (
-                  <tr key={animal.id}>
-                    <td>{animal.name}</td>
+                  <tr key={animal.id} data-testid="animal-row">
+                    <td>
+                      <Link href={`/animals/${encodeURIComponent(animal.id)}`}>
+                        {animal.name}
+                      </Link>
+                    </td>
                     <td>{animal.species}</td>
                     <td>
                       <span className="badge" data-status={animal.status}>

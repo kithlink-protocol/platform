@@ -101,3 +101,44 @@ export const applicantHistorySchema = z.object({
 });
 export type ApplicantHistory = z.infer<typeof applicantHistorySchema>;
 export type ApplicantHistoryApplication = ApplicantHistory['applicationsAtShelter'][number];
+
+export const checklistItemSchema = z.object({
+  id: uuidSchema,
+  label: z.string(),
+  position: z.number().int(),
+});
+export type ChecklistItem = z.infer<typeof checklistItemSchema>;
+
+export const checklistStateEntrySchema = z.object({
+  itemId: uuidSchema,
+  checked: z.boolean(),
+});
+export type ChecklistStateEntry = z.infer<typeof checklistStateEntrySchema>;
+
+export const reviewChecklistPayloadSchema = z.object({
+  items: z.array(checklistItemSchema),
+  state: z.array(checklistStateEntrySchema),
+});
+export type ReviewChecklistPayload = z.infer<typeof reviewChecklistPayloadSchema>;
+
+export const saveReviewChecklistSchema = z.object({
+  labels: z.array(z.string().trim().min(1).max(160)).max(12),
+});
+export type SaveReviewChecklistInput = z.infer<typeof saveReviewChecklistSchema>;
+
+export const saveChecklistStateSchema = z.object({
+  entries: z.array(
+    z.object({
+      itemId: uuidSchema,
+      checked: z.boolean(),
+    }),
+  ).max(12),
+});
+export type SaveChecklistStateInput = z.infer<typeof saveChecklistStateSchema>;
+
+export const statsSchema = z.object({
+  animalsAvailable: z.number().int(),
+  openApplications: z.number().int(),
+  avgPlacementHours30d: z.number().nullable(),
+});
+export type Stats = z.infer<typeof statsSchema>;

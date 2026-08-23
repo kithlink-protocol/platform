@@ -133,6 +133,25 @@ export default async function AnimalDetailPage({ params }: AnimalDetailPageProps
               </ul>
             </section>
           ) : null}
+
+          {animal.observations.length > 0 ? (
+            <details className="section-gap">
+              <summary className="t-heading">Behavior notes from the shelter</summary>
+              <p className="t-caption">Observations are snapshots in time — not verdicts.</p>
+              <ul className="timeline">
+                {animal.observations.map(observation => (
+                  <li key={observation.id}>
+                    {new Date(observation.createdAt).toISOString().slice(0, 10)}
+                    {observation.fasScore !== null ? ` · stress ${observation.fasScore}/4` : null}
+                    {observation.tags.length > 0 ? ` · ${observation.tags.join(', ')}` : null}
+                    {observation.note ? (
+                      <p>{observation.note}</p>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
         </section>
 
         <aside aria-label="Shelter and apply">

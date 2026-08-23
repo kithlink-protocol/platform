@@ -24,6 +24,17 @@ test('staff publishes the shelter site from the admin dashboard', async ({ page,
   await expect(publishedAt).toContainText(/Published at \d{4}-\d{2}-\d{2}T/);
   await expect(page.getByRole('link', { name: 'View site' })).toBeVisible();
 
+  // Propagation guard: poll until the published bundle is the one this publish produced.
+  await expect
+    .poll(
+      async () => {
+        const r = await request.get(`${API_URL}/public/v1/sites/happytail/index.html`);
+        return r.status() === 200 ? await r.text() : '';
+      },
+      { timeout: 10_000, intervals: [250] },
+    )
+    .toContain('Happy Tails Every Day');
+
   const res = await request.get(`${API_URL}/public/v1/sites/happytail/index.html`);
   expect(res.status()).toBe(200);
   const html = await res.text();

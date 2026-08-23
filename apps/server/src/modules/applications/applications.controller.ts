@@ -1,8 +1,10 @@
-import { Body, Controller, Get, Inject, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Param, Patch, Post, Put, Query, UseGuards } from '@nestjs/common';
 import {
   addApplicationNoteSchema,
   applicationDecisionSchema,
   createApplicationSchema,
+  saveChecklistStateSchema,
+  saveReviewChecklistSchema,
   staffApplicationListQuerySchema,
 } from '@kithlink/contracts';
 import { Principal } from '../../common/principal';
@@ -89,5 +91,58 @@ export class AdminApplicationsController {
   ) {
     const input = addApplicationNoteSchema.parse(body);
     return this.applications.staffAddNote(principal.user.id, shelterId, id, input);
+  }
+
+  @Get(':id/checklist')
+  @RequireStaffRole('viewer')
+  getChecklist(
+    @Principal() principal: Principal,
+    @Param('shelterId') shelterId: string,
+    @Param('id') id: string,
+  ) {
+    return this.applications.staffGetApplicationChecklist(principal.user.id, shelterId, id);
+  }
+
+  @Put(':id/checklist')
+  @RequireStaffRole('coordinator')
+  saveChecklistState(
+    @Principal() principal: Principal,
+    @Param('shelterId') shelterId: string,
+    @Param('id') id: string,
+    @Body() body: unknown,
+  ) {
+    const input = saveChecklistStateSchema.parse(body);
+    return this.applications.staffSaveApplicationChecklist(principal.user.id, shelterId, id, input);
+  }
+}
+
+@UseGuards(SessionGuard, StaffRoleGuard)
+@Controller('admin/v1/shelters/:shelterId')
+export class AdminShelterReviewController {
+  constructor(
+    @Inject(ApplicationsService) private readonly applications: ApplicationsService,
+  ) {}
+
+  @Get('review-checklist')
+  @RequireStaffRole('viewer')
+  getChecklist(@Principal() principal: Principal, @Param('shelterId') shelterId: string) {
+    return this.applications.staffGetChecklist(principal.user.id, shelterId);
+  }
+
+  @Put('review-checklist')
+  @RequireStaffRole('admin')
+  saveChecklist(
+    @Principal() principal: Principal,
+    @Param('shelterId') shelterId: string,
+    @Body() body: unknown,
+  ) {
+    const input = saveReviewChecklistSchema.parse(body);
+    return this.applications.staffSaveChecklist(principal.user.id, shelterId, input);
+  }
+
+  @Get('stats')
+  @RequireStaffRole('viewer')
+  stats(@Principal() principal: Principal, @Param('shelterId') shelterId: string) {
+    return this.applications.staffGetStats(principal.user.id, shelterId);
   }
 }

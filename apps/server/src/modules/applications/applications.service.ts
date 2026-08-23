@@ -9,6 +9,8 @@ import {
   applicationNoteSchema,
   applicationPublicSchema,
   applicantHistorySchema,
+  reviewChecklistPayloadSchema,
+  statsSchema,
   type AddApplicationNoteInput,
   type ApplicationCreatedResponse,
   type ApplicationDecisionInput,
@@ -18,7 +20,11 @@ import {
   type ApplicantHistory,
   type ArtifactPublic,
   type CreateApplicationInput,
+  type ReviewChecklistPayload,
+  type SaveChecklistStateInput,
+  type SaveReviewChecklistInput,
   type StaffApplicationListQuery,
+  type Stats,
 } from '@kithlink/contracts';
 import { decodeCursor, encodeCursor } from '../../common/cursor.util';
 import { isUniqueViolation } from '../../common/db.util';
@@ -499,6 +505,192 @@ export class ApplicationsService {
       authorName: authorEmail,
       body: inserted.body,
       createdAt: new Date(inserted.created_at as unknown as string | Date).toISOString(),
+    });
+  }
+
+  async staffGetChecklist(actorId: string, shelterId: string): Promise<ReviewChecklistPayload> {
+    const items = await this.tenants.withTenant(
+      { userId: actorId, shelterId, roleClass: 'staff' },
+      async sql =>
+        (await sql`
+          select id, label, position
+          from review_checklist_items
+          where shelter_id = ${shelterId}::uuid
+          order by position asc, created_at asc, id asc`) as unknown as {
+          id: string;
+          label: string;
+          position: number;
+        }[],
+    );
+    return reviewChecklistPayloadSchema.parse({ items, state: [] });
+  }
+
+  async staffSaveChecklist(
+    actorId: string,
+    shelterId: string,
+    input: SaveReviewChecklistInput,
+  ): Promise<ReviewChecklistPayload> {
+    const items = await this.tenants.withTenant(
+      { userId: actorId, shelterId, roleClass: 'staff' },
+      async sql => {
+        await sql`
+          delete from review_checklist_items
+          where shelter_id = ${shelterId}::uuid
+            and not (label = any(${input.labels}::text[]))`;
+        for (const [position, label] of input.labels.entries()) {
+          const existing = (await sql`
+            select id from review_checklist_items
+            where shelter_id = ${shelterId}::uuid and label = ${label}
+            limit 1`) as unknown as { id: string }[];
+          if (existing[0]) {
+            await sql`
+              update review_checklist_items set position = ${position}
+              where id = ${existing[0].id}::uuid`;
+          } else {
+            await sql`
+              insert into review_checklist_items (shelter_id, label, position)
+              values (${shelterId}::uuid, ${label}, ${position})`;
+          }
+        }
+        const items = (await sql`
+          select id, label, position
+          from review_checklist_items
+          where shelter_id = ${shelterId}::uuid
+          order by position asc, created_at asc, id asc`) as unknown as {
+          id: string;
+          label: string;
+          position: number;
+        }[];
+        await this.audit.append(sql, actorId, shelterId, 'checklist.updated', 'review_checklist', shelterId, {
+          labels: input.labels,
+        });
+        return items;
+      },
+    );
+    return reviewChecklistPayloadSchema.parse({ items, state: [] });
+  }
+
+  async staffGetApplicationChecklist(
+    actorId: string,
+    shelterId: string,
+    applicationId: string,
+  ): Promise<ReviewChecklistPayload> {
+    const rows = await this.tenants.withTenant(
+      { userId: actorId, shelterId, roleClass: 'staff' },
+      async sql => {
+        await this.assertApplicationInTenant(sql, applicationId);
+        return (await sql`
+          select i.id, i.label, i.position,
+                 coalesce(s.checked, false) as checked
+          from review_checklist_items i
+          left join application_checklist_state s
+            on s.item_id = i.id and s.application_id = ${applicationId}::uuid
+          where i.shelter_id = ${shelterId}::uuid
+          order by i.position asc, i.created_at asc, i.id asc`) as unknown as {
+          id: string;
+          label: string;
+          position: number;
+          checked: boolean;
+        }[];
+      },
+    );
+    return reviewChecklistPayloadSchema.parse({
+      items: rows.map(r => ({ id: r.id, label: r.label, position: r.position })),
+      state: rows.map(r => ({ itemId: r.id, checked: Boolean(r.checked) })),
+    });
+  }
+
+  async staffSaveApplicationChecklist(
+    actorId: string,
+    shelterId: string,
+    applicationId: string,
+    input: SaveChecklistStateInput,
+  ): Promise<ReviewChecklistPayload> {
+    let changed = 0;
+    const payload = await this.tenants.withTenant(
+      { userId: actorId, shelterId, roleClass: 'staff' },
+      async sql => {
+        await this.assertApplicationInTenant(sql, applicationId);
+        const itemIds = input.entries.map(e => e.itemId);
+        const validItems = (await sql`
+          select id from review_checklist_items
+          where shelter_id = ${shelterId}::uuid
+            and id = any(${itemIds.length ? itemIds : ['00000000-0000-0000-0000-000000000000']}::uuid[])`) as unknown as {
+          id: string;
+        }[];
+        const validIds = new Set(validItems.map(v => v.id));
+        const unknown = input.entries.find(e => !validIds.has(e.itemId));
+        if (unknown) throw new BadRequestException('Checklist item does not belong to this shelter');
+        const prior = (await sql`
+          select item_id, checked from application_checklist_state
+          where application_id = ${applicationId}::uuid
+            and item_id = any(${itemIds.length ? itemIds : ['00000000-0000-0000-0000-000000000000']}::uuid[])`) as unknown as {
+          item_id: string;
+          checked: boolean;
+        }[];
+        const priorMap = new Map(prior.map(p => [p.item_id, p.checked]));
+        changed = input.entries.filter(e => priorMap.get(e.itemId) !== e.checked).length;
+        for (const entry of input.entries) {
+          await sql`
+            insert into application_checklist_state (application_id, item_id, checked)
+            values (${applicationId}::uuid, ${entry.itemId}::uuid, ${entry.checked})
+            on conflict (application_id, item_id)
+            do update set checked = excluded.checked, updated_at = now()`;
+        }
+        if (changed > 0) {
+          await this.audit.append(sql, actorId, shelterId, 'application.checklist_updated', 'application', applicationId, {
+            changed,
+          });
+        }
+        return (await sql`
+          select i.id, i.label, i.position,
+                 coalesce(s.checked, false) as checked
+          from review_checklist_items i
+          left join application_checklist_state s
+            on s.item_id = i.id and s.application_id = ${applicationId}::uuid
+          where i.shelter_id = ${shelterId}::uuid
+          order by i.position asc, i.created_at asc, i.id asc`) as unknown as {
+          id: string;
+          label: string;
+          position: number;
+          checked: boolean;
+        }[];
+      },
+    );
+    return reviewChecklistPayloadSchema.parse({
+      items: payload.map(r => ({ id: r.id, label: r.label, position: r.position })),
+      state: payload.map(r => ({ itemId: r.id, checked: Boolean(r.checked) })),
+    });
+  }
+
+  async staffGetStats(actorId: string, shelterId: string): Promise<Stats> {
+    const rows = await this.tenants.withTenant(
+      { userId: actorId, shelterId, roleClass: 'staff' },
+      async sql =>
+        (await sql`
+          select
+            (select count(*)::int from animals
+              where shelter_id = ${shelterId}::uuid and status = 'available') as animals_available,
+            (select count(*)::int from applications
+              where shelter_id = ${shelterId}::uuid
+                and status in ('submitted', 'in_review', 'info_requested')) as open_applications,
+            (select avg(extract(epoch from (decided_at - submitted_at)) / 3600.0)
+              from applications
+              where shelter_id = ${shelterId}::uuid
+                and decided_at is not null
+                and submitted_at is not null
+                and decided_at >= now() - interval '30 days') as avg_placement_hours_30d`) as unknown as {
+          animals_available: number;
+          open_applications: number;
+          avg_placement_hours_30d: number | null;
+        }[],
+    );
+    const row = rows[0]!;
+    return statsSchema.parse({
+      animalsAvailable: row.animals_available,
+      openApplications: row.open_applications,
+      avgPlacementHours30d:
+        row.avg_placement_hours_30d === null ? null : Number(row.avg_placement_hours_30d),
     });
   }
 }

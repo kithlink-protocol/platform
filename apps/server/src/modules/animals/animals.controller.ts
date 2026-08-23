@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Inject, NotFoundException, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
-import { animalCreateSchema, animalListQuerySchema, animalUpdateSchema } from '@kithlink/contracts';
+import { addObservationSchema, animalCreateSchema, animalListQuerySchema, animalUpdateSchema } from '@kithlink/contracts';
 import { Principal } from '../../common/principal';
 import { RequireStaffRole, StaffRoleGuard } from '../../common/roles';
 import { SessionGuard } from '../../common/session.guard';
@@ -73,5 +73,31 @@ export class AdminAnimalsController {
   ) {
     const input = animalPhotoInputSchema.parse(body);
     return this.animalsService.addPhoto(this.ctxOf(principal, shelterId), shelterId, id, input);
+  }
+
+  @Post(':id/observations')
+  addObservation(
+    @Principal() principal: Principal,
+    @Param('shelterId') shelterId: string,
+    @Param('id') id: string,
+    @Body() body: unknown,
+  ) {
+    const input = addObservationSchema.parse(body);
+    return this.animalsService.addObservation(
+      this.ctxOf(principal, shelterId),
+      principal.user.id,
+      shelterId,
+      id,
+      input,
+    );
+  }
+
+  @Get(':id/observations')
+  listObservations(
+    @Principal() principal: Principal,
+    @Param('shelterId') shelterId: string,
+    @Param('id') id: string,
+  ) {
+    return this.animalsService.listObservations(this.ctxOf(principal, shelterId), shelterId, id, 50);
   }
 }

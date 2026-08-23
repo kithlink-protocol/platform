@@ -10,6 +10,8 @@ import {
   animalPublicSchema,
   animalSearchItemSchema,
   animalSearchResponseSchema,
+  behaviorObservationSchema,
+  type AddObservationInput,
   type AnimalAgeClass,
   type AnimalDetail,
   type AnimalPhotoPublic,
@@ -17,11 +19,12 @@ import {
   type AnimalSearchItem,
   type AnimalSearchQuery,
   type AnimalStatus,
+  type BehaviorObservation,
 } from '@kithlink/contracts';
 import { animalPhotos, animals, type AnySql, type PendingQuery, type Row, type TenantContext } from '@kithlink/db';
 import { decodeCursor, encodeCursor } from '../../common/cursor.util';
 import { AuditService } from '../../common/audit.service';
-import { isForeignKeyViolation } from '../../common/db.util';
+import { isCheckViolation, isForeignKeyViolation } from '../../common/db.util';
 import { TenantService } from '../db.module';
 
 // No photo-metadata input schema exists in contracts yet; kept server-local until promoted.
@@ -100,6 +103,24 @@ interface SearchRow extends AnimalRawRow, ShelterJoinRow {
 interface DetailRow extends AnimalRawRow, ShelterJoinRow {
   shelter_city: string | null;
   shelter_state: string | null;
+}
+
+interface ObservationRawRow {
+  id: string;
+  fas_score: number | null;
+  tags: string[];
+  note: string | null;
+  created_at: Date;
+}
+
+function mapObservation(row: ObservationRawRow): BehaviorObservation {
+  return behaviorObservationSchema.parse({
+    id: row.id,
+    fasScore: row.fas_score ?? null,
+    tags: row.tags ?? [],
+    note: row.note ?? null,
+    createdAt: new Date(row.created_at as unknown as string | Date).toISOString(),
+  });
 }
 
 @Injectable()
@@ -248,8 +269,12 @@ export class AnimalsService {
       const row = rows[0];
       if (!row) return null;
       const photos = await this.loadPhotos(sql, [row.id]);
+      // Observations ride the anon RLS policy: only visible when the animal is available,
+      // so detail behavior for unavailable animals stays identical (404 upstream).
+      const observations = await this.listPublicObservations(sql, row.id, 20);
       return animalDetailSchema.parse({
         ...animalCore(row, photos.get(row.id) ?? []),
+        observations,
         shelter: {
           name: row.shelter_name,
           slug: row.shelter_slug,
@@ -258,6 +283,72 @@ export class AnimalsService {
         },
       });
     });
+  }
+
+  async addObservation(
+    ctx: TenantContext,
+    actorId: string,
+    shelterId: string,
+    animalId: string,
+    input: AddObservationInput,
+  ): Promise<BehaviorObservation> {
+    return this.tenants.withTenant(ctx, async sql => {
+      const existing = (await sql`
+        select id from animals
+        where id = ${animalId}::uuid and shelter_id = ${shelterId}::uuid
+        limit 1`) as unknown as { id: string }[];
+      if (!existing[0]) throw new NotFoundException('Animal not found');
+      try {
+        const inserted = (await sql`
+          insert into animal_observations (animal_id, shelter_id, fas_score, tags, note, author_id)
+          values (${animalId}::uuid, ${shelterId}::uuid, ${input.fasScore ?? null},
+                  ${input.tags}::text[], ${input.note ?? null}, ${actorId}::uuid)
+          returning id, fas_score, tags, note, created_at`) as unknown as ObservationRawRow[];
+        const row = inserted[0]!;
+        await this.audit.append(sql, actorId, shelterId, 'observation.added', 'animal_observation', row.id, {
+          animalId,
+          fasScore: input.fasScore ?? null,
+          tags: input.tags,
+        });
+        return mapObservation(row);
+      } catch (error) {
+        if (isCheckViolation(error)) throw new BadRequestException('Invalid observation');
+        throw error;
+      }
+    });
+  }
+
+  async listObservations(
+    ctx: TenantContext,
+    shelterId: string,
+    animalId: string,
+    limit = 50,
+  ): Promise<{ items: BehaviorObservation[] }> {
+    return this.tenants.withTenant(ctx, async sql => {
+      const existing = (await sql`
+        select id from animals
+        where id = ${animalId}::uuid and shelter_id = ${shelterId}::uuid
+        limit 1`) as unknown as { id: string }[];
+      if (!existing[0]) throw new NotFoundException('Animal not found');
+      return { items: await this.listPublicObservations(sql, animalId, limit, shelterId) };
+    });
+  }
+
+  private async listPublicObservations(
+    sql: AnySql,
+    animalId: string,
+    limit: number,
+    shelterId?: string,
+  ): Promise<BehaviorObservation[]> {
+    const shelterFrag =
+      shelterId !== undefined ? sql` and shelter_id = ${shelterId}::uuid` : sql``;
+    const rows = (await sql`
+      select id, fas_score, tags, note, created_at
+      from animal_observations
+      where animal_id = ${animalId}::uuid${shelterFrag}
+      order by created_at desc, id desc
+      limit ${limit}`) as unknown as ObservationRawRow[];
+    return rows.map(mapObservation);
   }
 
   async create(

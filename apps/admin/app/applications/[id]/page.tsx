@@ -10,6 +10,8 @@ import type {
   ApplicationNote,
   ArtifactWithVerifications,
   AuthSession,
+  ChecklistStateEntry,
+  ReviewChecklistPayload,
   StaffApplicationDetail,
 } from '@kithlink/contracts';
 
@@ -26,6 +28,7 @@ export default function ApplicationDetailPage() {
   const [history, setHistory] = useState<ApplicantHistory | null>(null);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [notes, setNotes] = useState<ApplicationNote[]>([]);
+  const [checklist, setChecklist] = useState<ReviewChecklistPayload | null>(null);
   const [noteBody, setNoteBody] = useState('');
   const [notePending, setNotePending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -92,6 +95,11 @@ export default function ApplicationDetailPage() {
           err instanceof Error ? err.message : 'Could not load applicant history.',
         );
       });
+    apiFetch<ReviewChecklistPayload>(`${base}/checklist`)
+      .then((data) => {
+        if (!cancelled) setChecklist(data);
+      })
+      .catch(() => undefined);
     refetchNotes();
     return () => {
       cancelled = true;
@@ -113,6 +121,24 @@ export default function ApplicationDetailPage() {
       setError(err instanceof Error ? err.message : 'Could not add the note.');
     } finally {
       setNotePending(false);
+    }
+  }
+
+  async function toggleChecklistItem(itemId: ChecklistStateEntry['itemId'], checked: boolean) {
+    if (!base || !checklist) return;
+    try {
+      await apiFetch(`${base}/checklist`, {
+        method: 'PUT',
+        body: JSON.stringify({ entries: [{ itemId, checked }] }),
+      });
+      setChecklist({
+        items: checklist.items,
+        state: checklist.state.map((entry) =>
+          entry.itemId === itemId ? { ...entry, checked } : entry,
+        ),
+      });
+    } catch {
+      setError('Could not update the checklist.');
     }
   }
 
@@ -345,6 +371,29 @@ export default function ApplicationDetailPage() {
             <dt className="t-subheading">Shelter</dt>
             <dd className="t-meta">{shelterName || '—'}</dd>
           </dl>
+          <h2 className="t-heading section-gap">Review checklist</h2>
+          {!checklist || checklist.items.length === 0 ? (
+            <p className="t-meta">No checklist configured.</p>
+          ) : (
+            <ul className="timeline">
+              {checklist.items.map((item) => {
+                const entry = checklist.state.find((s) => s.itemId === item.id);
+                return (
+                  <li key={item.id} data-testid="checklist-item">
+                    <label>
+                      <input
+                        type="checkbox"
+                        data-testid="checklist-toggle"
+                        checked={entry?.checked ?? false}
+                        onChange={(e) => toggleChecklistItem(item.id, e.target.checked)}
+                      />{' '}
+                      {item.label}
+                    </label>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </aside>
       </div>
 
