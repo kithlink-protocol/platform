@@ -35,8 +35,10 @@ async function extractProblemMessage(res: Response): Promise<string> {
 }
 
 export async function listShelters(): Promise<ShelterPublic[]> {
-  const data = await fetchJson<{ items: ShelterPublic[] }>('/public/v1/shelters');
-  return data.items;
+  const data = await fetchJson<ShelterPublic[] | { items: ShelterPublic[] }>(
+    '/public/v1/shelters',
+  );
+  return Array.isArray(data) ? data : (data.items ?? []);
 }
 
 export async function getShelter(slug: string): Promise<ShelterDetail> {

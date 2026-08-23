@@ -4,6 +4,8 @@ import { registerSchema, staffRoles } from '@kithlink/contracts';
 import { decodeCursor, encodeCursor } from '../src/common/cursor.util';
 import { exceptionToProblem } from '../src/common/problem.util';
 import { STAFF_ROLE_RANK, hasSufficientRole } from '../src/common/roles';
+import { CryptoUtil } from '../src/common/crypto.util';
+import { computeConfidence } from '../src/modules/parse/score';
 
 describe('staff role ranks', () => {
   it('orders viewer < volunteer < coordinator < admin < owner', () => {
@@ -53,5 +55,64 @@ describe('problem mapping', () => {
     const problem = exceptionToProblem(new Error('boom'));
     expect(problem.status).toBe(500);
     expect(problem.title).toBe('Internal Server Error');
+  });
+});
+
+describe('confidence scoring', () => {
+  it('scores fully grounded, complete extractions high', () => {
+    const score = computeConfidence({
+      ocrMean: 0.95,
+      groundedRatio: 1,
+      completeness: 1,
+      consistency: 1,
+      classifierAgreement: 1,
+    });
+    expect(score).toBeGreaterThan(0.8);
+    expect(score).toBeLessThanOrEqual(1);
+  });
+
+  it('scores ungrounded extractions below the pending_review threshold', () => {
+    const score = computeConfidence({
+      ocrMean: 0.9,
+      groundedRatio: 0,
+      completeness: 0.4,
+      consistency: 0.5,
+      classifierAgreement: 0.5,
+    });
+    expect(score).toBeLessThan(0.55);
+  });
+
+  it('weights match doc04 V4 and clamp to [0,1]', () => {
+    expect(computeConfidence({ ocrMean: 5, groundedRatio: -2, completeness: 0.5, consistency: 0.5, classifierAgreement: 1 })).toBeLessThanOrEqual(1);
+    expect(computeConfidence({ ocrMean: 0, groundedRatio: 0, completeness: 0, consistency: 0, classifierAgreement: 0 })).toBe(0);
+  });
+});
+
+describe('crypto seal/open', () => {
+  const crypto = new CryptoUtil(Buffer.from('k'.repeat(32)).toString('base64'));
+
+  it('roundtrips plaintext', () => {
+    const secret = '12 Secret St, Springfield';
+    expect(crypto.open(crypto.seal(secret))).toBe(secret);
+  });
+
+  it('detects tampered ciphertext', () => {
+    const sealed = crypto.seal('address');
+    const envelope = JSON.parse(Buffer.from(sealed, 'base64').toString('utf8')) as { ct: string };
+    const tampered = Buffer.from(
+      JSON.stringify({ ...envelope, ct: Buffer.from('evil').toString('base64') }),
+      'utf8',
+    ).toString('base64');
+    expect(() => crypto.open(tampered)).toThrow();
+  });
+
+  it('rejects malformed payloads', () => {
+    expect(() => crypto.open('not-base64-json!!')).toThrow();
+  });
+
+  it('hashes deterministically', () => {
+    expect(crypto.sha256Hex(Buffer.from('abc'))).toBe(
+      'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
+    );
   });
 });

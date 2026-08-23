@@ -2,3 +2,7 @@ export * from './common';
 export * from './auth';
 export * from './shelters';
 export * from './animals';
+export * from './applicants';
+export * from './artifacts';
+export * from './applications';
+export * from './consents';

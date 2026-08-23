@@ -15,6 +15,13 @@
       "when": 1787448034786,
       "tag": "0001_bored_leader",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1787450016928,
+      "tag": "0002_optimal_guardsmen",
+      "breakpoints": true
     }
   ]
 }

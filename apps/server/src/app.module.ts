@@ -5,6 +5,14 @@ import { AuthModule } from './modules/auth/auth.module';
 import { StaffModule } from './modules/staff/staff.module';
 import { AnimalsModule } from './modules/animals/animals.module';
 import { PublicModule } from './modules/public/public.module';
+import { CryptoModule } from './common/crypto.util';
+import { S3Module } from './modules/s3/s3.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
+import { ProfileModule } from './modules/profile/profile.module';
+import { ArtifactsModule } from './modules/artifacts/artifacts.module';
+import { ApplicationsModule } from './modules/applications/applications.module';
+import { ConsentsModule } from './modules/consents/consents.module';
+import { ParseModule } from './modules/parse/parse.module';
 
 @Module({
   imports: [
@@ -14,6 +22,14 @@ import { PublicModule } from './modules/public/public.module';
     StaffModule,
     AnimalsModule,
     PublicModule,
+    CryptoModule,
+    S3Module,
+    NotificationsModule,
+    ProfileModule,
+    ArtifactsModule,
+    ApplicationsModule,
+    ConsentsModule,
+    ParseModule,
   ],
 })
 export class AppModule {}

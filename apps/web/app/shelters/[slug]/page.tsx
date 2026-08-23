@@ -73,7 +73,7 @@ export default async function ShelterDetailPage({ params }: ShelterPageProps) {
           <ul className="grid" style={{ listStyle: 'none' }}>
             {animals.map((animal) => (
               <li key={animal.id}>
-                <article className="card">
+                <article className="card" data-testid="animal-card">
                   <h3>{animal.name}</h3>
                   <p className="muted">
                     {animal.species}
@@ -82,6 +82,13 @@ export default async function ShelterDetailPage({ params }: ShelterPageProps) {
                   <span className="badge" data-status={animal.status}>
                     {animal.status}
                   </span>
+                  {animal.status === 'available' ? (
+                    <p style={{ marginBottom: 0 }}>
+                      <Link className="button" data-testid="apply-link" href={`/apply/${animal.id}`}>
+                        Apply
+                      </Link>
+                    </p>
+                  ) : null}
                 </article>
               </li>
             ))}

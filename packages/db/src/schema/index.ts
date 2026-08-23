@@ -1,11 +1,13 @@
 import { relations, sql } from 'drizzle-orm';
 import {
   bigint,
+  boolean,
   check,
   customType,
   index,
   integer,
   jsonb,
+  numeric,
   pgEnum,
   pgTable,
   primaryKey,
@@ -13,6 +15,7 @@ import {
   timestamp,
   uniqueIndex,
   uuid,
+  type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 
 export const citext = customType<{ data: string }>({
@@ -33,6 +36,18 @@ export const staffRole = pgEnum('staff_role', [
   'coordinator',
   'volunteer',
   'viewer',
+]);
+
+export const applicationStatus = pgEnum('application_status', [
+  'draft',
+  'submitted',
+  'in_review',
+  'info_requested',
+  'approved',
+  'denied',
+  'withdrawn',
+  'adopted',
+  'expired',
 ]);
 
 export const shelters = pgTable('shelters', {
@@ -160,6 +175,142 @@ export const sheltersRelations = relations(shelters, ({ many }) => ({
   animals: many(animals),
 }));
 
+export const applicantProfiles = pgTable(
+  'applicant_profiles',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .unique()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    legalName: text('legal_name').notNull(),
+    displayName: text('display_name'),
+    phone: text('phone'),
+    addressEnc: text('address_enc'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+);
+
+export const artifacts = pgTable(
+  'artifacts',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    applicantId: uuid('applicant_id')
+      .notNull()
+      .references(() => applicantProfiles.id, { onDelete: 'cascade' }),
+    type: text('type').notNull(),
+    state: text('state').notNull().default('uploaded'),
+    extractedJson: jsonb('extracted_json'),
+    confidence: numeric('confidence', { precision: 4, scale: 3 }),
+    redactedText: text('redacted_text'),
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+    networkVerified: boolean('network_verified').notNull().default(false),
+    supersededBy: uuid('superseded_by').references((): AnyPgColumn => artifacts.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('artifacts_applicant_idx').on(t.applicantId, t.type, t.state),
+    check(
+      'artifacts_type_check',
+      sql`${t.type} IN ('lease_addendum','vet_record','gov_id','utility_bill','other')`,
+    ),
+    check(
+      'artifacts_state_check',
+      sql`${t.state} IN ('uploaded','parsing','parsed','pending_review','verified','rejected','expired','failed_parse')`,
+    ),
+  ],
+);
+
+export const artifactFiles = pgTable(
+  'artifact_files',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    artifactId: uuid('artifact_id')
+      .notNull()
+      .references(() => artifacts.id, { onDelete: 'cascade' }),
+    version: integer('version').notNull().default(1),
+    storageKey: text('storage_key').notNull().unique(),
+    edekWrapped: text('edek_wrapped').notNull(),
+    sha256: text('sha256').notNull(),
+    mime: text('mime').notNull(),
+    bytes: bigint('bytes', { mode: 'number' }).notNull(),
+    uploadedBy: uuid('uploaded_by')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+);
+
+export const applications = pgTable(
+  'applications',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    animalId: uuid('animal_id')
+      .notNull()
+      .references(() => animals.id),
+    shelterId: uuid('shelter_id')
+      .notNull()
+      .references(() => shelters.id),
+    applicantId: uuid('applicant_id')
+      .notNull()
+      .references(() => applicantProfiles.id, { onDelete: 'cascade' }),
+    status: applicationStatus('status').notNull().default('draft'),
+    answersJson: jsonb('answers_json').notNull().default({}),
+    submittedAt: timestamp('submitted_at', { withTimezone: true }),
+    decidedAt: timestamp('decided_at', { withTimezone: true }),
+    decisionNote: text('decision_note'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('applications_animal_applicant_uq').on(t.animalId, t.applicantId),
+    index('applications_shelter_status_idx').on(t.shelterId, t.status),
+  ],
+);
+
+export const consentGrants = pgTable(
+  'consent_grants',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    applicantId: uuid('applicant_id')
+      .notNull()
+      .references(() => applicantProfiles.id, { onDelete: 'cascade' }),
+    shelterId: uuid('shelter_id')
+      .notNull()
+      .references(() => shelters.id),
+    applicationId: uuid('application_id').references(() => applications.id, {
+      onDelete: 'set null',
+    }),
+    scope: text('scope').notNull(),
+    status: text('status').notNull().default('active'),
+    grantedAt: timestamp('granted_at', { withTimezone: true }).notNull().defaultNow(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+  },
+  (t) => [
+    index('consent_grants_lookup_idx').on(t.applicantId, t.shelterId, t.scope, t.status),
+    check(
+      'consent_grants_scope_check',
+      sql`${t.scope} IN ('application_review','post_adoption_contact')`,
+    ),
+    check(
+      'consent_grants_status_check',
+      sql`${t.status} IN ('granted','active','revoked','expired')`,
+    ),
+  ],
+);
+
+/** Transactional outbox (doc 01 §6): dispatcher drains to SMTP/webhooks. */
+export const outboxEvents = pgTable('outbox_events', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  topic: text('topic').notNull(),
+  payloadJson: jsonb('payload_json').notNull().default({}),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  sentAt: timestamp('sent_at', { withTimezone: true }),
+});
+
 export const animalsRelations = relations(animals, ({ one, many }) => ({
   shelter: one(shelters, { fields: [animals.shelterId], references: [shelters.id] }),
   photos: many(animalPhotos),
@@ -177,4 +328,45 @@ export const usersRelations = relations(users, ({ many }) => ({
 export const staffMembersRelations = relations(staffMembers, ({ one }) => ({
   shelter: one(shelters, { fields: [staffMembers.shelterId], references: [shelters.id] }),
   user: one(users, { fields: [staffMembers.userId], references: [users.id] }),
+}));
+
+export const applicantProfilesRelations = relations(applicantProfiles, ({ one, many }) => ({
+  user: one(users, { fields: [applicantProfiles.userId], references: [users.id] }),
+  artifacts: many(artifacts),
+  applications: many(applications),
+  consentGrants: many(consentGrants),
+}));
+
+export const artifactsRelations = relations(artifacts, ({ one, many }) => ({
+  applicant: one(applicantProfiles, {
+    fields: [artifacts.applicantId],
+    references: [applicantProfiles.id],
+  }),
+  files: many(artifactFiles),
+}));
+
+export const artifactFilesRelations = relations(artifactFiles, ({ one }) => ({
+  artifact: one(artifacts, { fields: [artifactFiles.artifactId], references: [artifacts.id] }),
+}));
+
+export const applicationsRelations = relations(applications, ({ one, many }) => ({
+  animal: one(animals, { fields: [applications.animalId], references: [animals.id] }),
+  shelter: one(shelters, { fields: [applications.shelterId], references: [shelters.id] }),
+  applicant: one(applicantProfiles, {
+    fields: [applications.applicantId],
+    references: [applicantProfiles.id],
+  }),
+  consentGrants: many(consentGrants),
+}));
+
+export const consentGrantsRelations = relations(consentGrants, ({ one }) => ({
+  applicant: one(applicantProfiles, {
+    fields: [consentGrants.applicantId],
+    references: [applicantProfiles.id],
+  }),
+  shelter: one(shelters, { fields: [consentGrants.shelterId], references: [shelters.id] }),
+  application: one(applications, {
+    fields: [consentGrants.applicationId],
+    references: [applications.id],
+  }),
 }));

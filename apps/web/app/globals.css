@@ -241,3 +241,92 @@ fieldset {
   outline-offset: 2px;
   border-radius: 4px;
 }
+
+.site-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+  font-weight: 600;
+}
+
+.form-row {
+  margin-bottom: 1rem;
+}
+
+.form-row input,
+.form-row select,
+.form-row textarea {
+  width: 100%;
+  max-width: 24rem;
+  padding: 0.55rem 0.75rem;
+  font-size: 1rem;
+  font-family: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.form-row textarea {
+  max-width: 36rem;
+  min-height: 7rem;
+  resize: vertical;
+}
+
+.btn {
+  display: inline-block;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 0.55rem 1.1rem;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn:hover {
+  background: var(--accent-strong);
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.success {
+  background: var(--badge-available);
+  color: var(--badge-available-text);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+}
+
+.badge[data-status='submitted'],
+.badge[data-status='approved'],
+.badge[data-status='verified'],
+.badge[data-status='parsed'] {
+  background: var(--badge-available);
+  color: var(--badge-available-text);
+}
+
+.badge[data-status='in_review'],
+.badge[data-status='info_requested'],
+.badge[data-status='pending_review'],
+.badge[data-status='parsing'],
+.badge[data-status='uploaded'] {
+  background: var(--badge-pending);
+  color: var(--badge-pending-text);
+}
+
+.badge[data-status='rejected'],
+.badge[data-status='denied'],
+.badge[data-status='expired'] {
+  background: var(--badge-unavailable);
+  color: var(--badge-unavailable-text);
+}
+
+.badge[data-status='withdrawn'] {
+  background: var(--badge-draft);
+  color: var(--badge-draft-text);
+}

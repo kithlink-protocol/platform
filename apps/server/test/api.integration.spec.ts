@@ -154,4 +154,154 @@ describe.skipIf(!testUrl)('api integration', () => {
       expect(byAction.get(action) ?? 0).toBeGreaterThan(0);
     }
   });
+
+  describe('M1 applicant loop', () => {
+    let applicantCookie: string[];
+    let applicantEmail: string;
+    let applicantProfileId: string;
+    let artifactId: string;
+    let grantId: string;
+    let applicationId: string;
+    let animalAId: string;
+    let animalBId: string;
+
+    it('upserts the profile and never returns the address', async () => {
+      applicantEmail = `applicant-${Date.now()}@x.dev`;
+      await http().post('/app/v1/auth/register').send({ email: applicantEmail, password: 'Password123x' });
+      applicantCookie = (await http().post('/app/v1/auth/login').send({ email: applicantEmail, password: 'Password123x' })).headers['set-cookie'];
+
+      const put = await http().put('/app/v1/me/profile').set('Cookie', applicantCookie).send({
+        legalName: 'Ada Lovelace',
+        displayName: 'Ada',
+        phone: '+14155551234',
+        address: '12 Secret St, Springfield',
+      });
+      expect([200, 201]).toContain(put.status);
+      expect(put.body.legalName).toBe('Ada Lovelace');
+      expect(put.body.address).toBeUndefined();
+      applicantProfileId = put.body.id;
+
+      const get = await http().get('/app/v1/me/profile').set('Cookie', applicantCookie);
+      expect(get.status).toBe(200);
+      expect(JSON.stringify(get.body)).not.toContain('Secret St');
+      expect(get.body.address).toBeUndefined();
+      expect(get.body.phone).toBe('+14155551234');
+    });
+
+    it('returns a 400 when applying without a profile', async () => {
+      const noProfileEmail = `noprofile-${Date.now()}@x.dev`;
+      await http().post('/app/v1/auth/register').send({ email: noProfileEmail, password: 'Password123x' });
+      const noProfileCookie = (await http().post('/app/v1/auth/login').send({ email: noProfileEmail, password: 'Password123x' })).headers['set-cookie'];
+      const res = await http().post('/app/v1/applications').set('Cookie', noProfileCookie)
+        .send({ animalId: volunteerAnimalId });
+      expect(res.status).toBe(400);
+    });
+
+    it('initializes an artifact upload with a presigned PUT', async () => {
+      const res = await http().post('/app/v1/me/artifacts').set('Cookie', applicantCookie)
+        .send({ type: 'gov_id', mime: 'image/png', bytes: 1024 });
+      expect(res.status).toBe(201);
+      expect(res.body.artifact.state).toBe('uploaded');
+      expect(res.body.upload.url).toMatch(/^https?:\/\//);
+      expect(res.body.upload.fields).toBeNull();
+      expect(res.body.upload.expiresIn).toBe(600);
+      artifactId = res.body.artifact.id;
+    });
+
+    it('submits an application, grants consent, and gates staff visibility via RLS', async () => {
+      const seeded = (await tenants.service(async sql => {
+        const a = (await sql`
+          insert into animals (shelter_id, name, species, status)
+          values (${shelterId}::uuid, 'Biscuit', 'dog', 'available') returning id`) as unknown as { id: string }[];
+        const b = (await sql`
+          insert into animals (shelter_id, name, species, status)
+          values (${shelterId}::uuid, 'Miso', 'cat', 'available') returning id`) as unknown as { id: string }[];
+        return { a: a[0]!.id, b: b[0]!.id };
+      })) as { a: string; b: string };
+      animalAId = seeded.a;
+      animalBId = seeded.b;
+
+      const apply = await http().post('/app/v1/applications').set('Cookie', applicantCookie)
+        .send({ animalId: animalAId, answers: { why_this_pet: ' companionship' } });
+      expect(apply.status).toBe(201);
+      expect(apply.body.application.status).toBe('submitted');
+      expect(apply.body.application.animalName).toBe('Biscuit');
+      expect(apply.body.consentGrantId).toBeTruthy();
+      applicationId = apply.body.application.id;
+      grantId = apply.body.consentGrantId;
+
+      const consents = await http().get('/app/v1/me/consents').set('Cookie', applicantCookie);
+      expect(consents.status).toBe(200);
+      const grant = consents.body.find((g: { id: string }) => g.id === grantId);
+      expect(grant?.scope).toBe('application_review');
+      expect(grant?.status).toBe('active');
+      expect(grant?.shelterName.length).toBeGreaterThan(0);
+
+      const staffApps = await http().get(`/admin/v1/shelters/${shelterId}/applications`).set('Cookie', devCookie);
+      expect(staffApps.status).toBe(200);
+      expect(staffApps.body.items.some((a: { id: string }) => a.id === applicationId)).toBe(true);
+
+      const staffArtifacts = await http()
+        .get(`/admin/v1/shelters/${shelterId}/artifacts?applicantId=${applicantProfileId}`)
+        .set('Cookie', devCookie);
+      expect(staffArtifacts.status).toBe(200);
+      expect(staffArtifacts.body.items.some((a: { id: string }) => a.id === artifactId)).toBe(true);
+
+      const revoke = await http().delete(`/app/v1/me/consents/${grantId}`).set('Cookie', applicantCookie);
+      expect(revoke.status).toBe(200);
+
+      const afterRevoke = await http()
+        .get(`/admin/v1/shelters/${shelterId}/artifacts?applicantId=${applicantProfileId}`)
+        .set('Cookie', devCookie);
+      expect(afterRevoke.status).toBe(200);
+      expect(afterRevoke.body.items).toEqual([]);
+
+      const fileAttempt = await http()
+        .get(`/admin/v1/shelters/${shelterId}/artifacts/${artifactId}/file`)
+        .set('Cookie', devCookie);
+      expect(fileAttempt.status).toBe(403);
+
+      const dupApply = await http().post('/app/v1/applications').set('Cookie', applicantCookie)
+        .send({ animalId: animalAId });
+      expect(dupApply.status).toBe(409);
+    });
+
+    it('validates transitions and extends consent on terminal decisions', async () => {
+      const second = await http().post('/app/v1/applications').set('Cookie', applicantCookie)
+        .send({ animalId: animalBId });
+      expect(second.status).toBe(201);
+      const secondAppId = second.body.application.id;
+
+      const invalid = await http()
+        .patch(`/admin/v1/shelters/${shelterId}/applications/${secondAppId}/status`)
+        .set('Cookie', devCookie)
+        .send({ status: 'approved' });
+      expect(invalid.status).toBe(400);
+
+      const toReview = await http()
+        .patch(`/admin/v1/shelters/${shelterId}/applications/${secondAppId}/status`)
+        .set('Cookie', devCookie)
+        .send({ status: 'in_review' });
+      expect(toReview.status).toBe(200);
+
+      const approve = await http()
+        .patch(`/admin/v1/shelters/${shelterId}/applications/${secondAppId}/status`)
+        .set('Cookie', devCookie)
+        .send({ status: 'approved', note: 'great fit' });
+      expect(approve.status).toBe(200);
+      expect(approve.body.status).toBe('approved');
+
+      const decided = (await tenants.service(async sql => {
+        return sql`select decided_at from applications where id = ${secondAppId}::uuid`;
+      })) as unknown as { decided_at: string | null }[];
+      expect(decided[0]?.decided_at).toBeTruthy();
+
+      const grants = (await tenants.service(async sql => {
+        return sql`select expires_at from consent_grants where application_id = ${secondAppId}::uuid`;
+      })) as unknown as { expires_at: string | null }[];
+      const expiresAt = new Date(grants[0]!.expires_at!).getTime();
+      const days90 = 90 * 24 * 60 * 60 * 1000;
+      expect(Math.abs(expiresAt - (Date.now() + days90))).toBeLessThan(24 * 60 * 60 * 1000);
+    });
+  });
 });

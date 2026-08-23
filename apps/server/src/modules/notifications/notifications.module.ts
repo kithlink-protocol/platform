@@ -1,0 +1,91 @@
+import { Global, Inject, Injectable, Module, type OnApplicationShutdown } from '@nestjs/common';
+import nodemailer from 'nodemailer';
+import type { Transporter } from 'nodemailer';
+import type { AnySql } from '@kithlink/db';
+import { TenantService } from '../db.module';
+
+export interface OutboxEmailPayload {
+  to: string[];
+  subject: string;
+  text: string;
+}
+
+@Injectable()
+export class OutboxService {
+  constructor(
+    @Inject(TenantService) private readonly tenants: TenantService,
+  ) {}
+
+  /** Enqueue inside the caller's transaction so the event commits atomically with the write. */
+  async enqueue(sql: AnySql, topic: string, payload: OutboxEmailPayload): Promise<void> {
+    await sql`
+      insert into outbox_events (topic, payload_json)
+      values (${topic}, ${JSON.stringify(payload)}::jsonb)`;
+  }
+
+  async enqueueViaService(topic: string, payload: OutboxEmailPayload): Promise<void> {
+    await this.tenants.service(sql => this.enqueue(sql, topic, payload));
+  }
+}
+
+@Injectable()
+export class MailDispatcher implements OnApplicationShutdown {
+  private readonly transport: Transporter | null;
+  private timer: ReturnType<typeof setInterval> | null = null;
+
+  constructor(
+    @Inject(TenantService) private readonly tenants: TenantService,
+  ) {
+    this.transport = process.env.SMTP_URL ? nodemailer.createTransport(process.env.SMTP_URL) : null;
+  }
+
+  start(intervalMs = 10_000): void {
+    if (!this.transport) {
+      console.warn('[outbox] SMTP_URL not set; dispatcher idle — events will queue unsent');
+      return;
+    }
+    this.timer = setInterval(() => void this.drain(), intervalMs);
+    this.timer.unref?.();
+  }
+
+  async drain(): Promise<number> {
+    if (!this.transport) return 0;
+    const rows = (await this.tenants.service(async sql => {
+      return sql`
+        select id, topic, payload_json
+        from outbox_events
+        where sent_at is null
+        order by created_at
+        limit 20`;
+    })) as unknown as { id: string; topic: string; payload_json: OutboxEmailPayload }[];
+    let sent = 0;
+    for (const row of rows) {
+      try {
+        await this.transport.sendMail({
+          from: process.env.MAIL_FROM ?? 'Kithlink <no-reply@localhost>',
+          to: row.payload_json.to,
+          subject: row.payload_json.subject,
+          text: row.payload_json.text,
+        });
+        await this.tenants.service(
+          async sql => sql`update outbox_events set sent_at = now() where id = ${row.id}::uuid`,
+        );
+        sent++;
+      } catch (error) {
+        console.warn(`[outbox] failed to deliver ${row.topic} event ${row.id}`, error);
+      }
+    }
+    return sent;
+  }
+
+  onApplicationShutdown(): void {
+    if (this.timer) clearInterval(this.timer);
+  }
+}
+
+@Global()
+@Module({
+  providers: [OutboxService, MailDispatcher],
+  exports: [OutboxService, MailDispatcher],
+})
+export class NotificationsModule {}

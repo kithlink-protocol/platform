@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { ProblemFilter } from './common/http-exception.filter';
+import { MailDispatcher } from './modules/notifications/notifications.module';
 
 export function configureApp(app: NestExpressApplication): void {
   app.use(helmet());
@@ -24,6 +25,7 @@ async function bootstrap(): Promise<void> {
   }
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   configureApp(app);
+  app.get(MailDispatcher).start(Number(process.env.OUTBOX_INTERVAL_MS) || 10_000);
   await app.listen(Number(process.env.API_PORT) || 4000);
 }
 

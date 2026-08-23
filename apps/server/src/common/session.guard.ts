@@ -6,7 +6,10 @@ import type { StaffRole } from '@kithlink/contracts';
 import { TenantService } from '../modules/db.module';
 import type { Principal, PrincipalRequest } from './principal';
 
-export const SESSION_COOKIE_NAME = '__Host-kithlink_session';
+export const IS_PROD = process.env.NODE_ENV === 'production';
+export const SESSION_COOKIE_NAME = IS_PROD
+  ? '__Host-kithlink_session'
+  : 'kithlink_session';
 
 export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -32,7 +35,7 @@ export function sessionCookieOptions() {
     sameSite: 'lax',
     path: '/',
     maxAge: SESSION_TTL_MS,
-    secure: true, // __Host- prefix requires Secure; browsers accept it on localhost (trustworthy origin).
+    secure: IS_PROD,
   } as const;
 }
 
