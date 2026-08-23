@@ -121,14 +121,6 @@ jobs:
           PGPASSWORD=kithlink_dev psql -h localhost -U kithlink -d kithlink \
             -f deploy/compose/initdb/01-roles.sql \
             -f deploy/compose/initdb/02-extensions.sql
-      - name: Create MinIO bucket (retry until ready)
-        run: |
-          ok=0
-          for i in $(seq 1 30); do
-            if pnpm --filter @kithlink/server exec tsx scripts/create-bucket.ts; then ok=1; break; fi
-            sleep 2
-          done
-          [ "$ok" = 1 ]
       - name: Generate master key
         run: echo "KITHLINK_MASTER_KEY=$(openssl rand -base64 32)" >> "$GITHUB_ENV"
       - name: Migrate
@@ -143,6 +135,14 @@ jobs:
             curl -sf http://localhost:9000/minio/health/live && break
             sleep 1
           done
+      - name: Create MinIO bucket (retry until ready)
+        run: |
+          ok=0
+          for i in $(seq 1 30); do
+            if pnpm --filter @kithlink/server exec tsx scripts/create-bucket.ts; then ok=1; break; fi
+            sleep 2
+          done
+          [ "$ok" = 1 ]
       - name: Install Playwright browsers
         run: pnpm --filter @kithlink/e2e exec playwright install --with-deps chromium
       - name: Run e2e
