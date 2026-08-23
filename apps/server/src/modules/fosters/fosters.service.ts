@@ -5,7 +5,6 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { createHash, timingSafeEqual } from 'node:crypto';
-import type { AnySql } from '@kithlink/db';
 import {
   fosterCheckInViewSchema,
   fosterHomeListResponseSchema,
