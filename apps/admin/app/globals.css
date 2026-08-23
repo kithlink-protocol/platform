@@ -1,0 +1,243 @@
+:root {
+  color-scheme: light dark;
+  --bg: #f6f6f3;
+  --surface: #ffffff;
+  --text: #1d1d1b;
+  --muted: #5f5f5a;
+  --border: #e1e1da;
+  --accent: #14624b;
+  --accent-strong: #0e4a38;
+  --accent-contrast: #ffffff;
+  --focus: #14624b;
+  --danger-bg: #fbeeed;
+  --danger-text: #8f2f22;
+  --badge-available: #e2f3ea;
+  --badge-available-text: #14532d;
+  --badge-pending: #fdf3dc;
+  --badge-pending-text: #7a5205;
+  --badge-adopted: #e8e8f5;
+  --badge-adopted-text: #3b3f7a;
+  --badge-draft: #ececea;
+  --badge-draft-text: #55554f;
+  --badge-unavailable: #fbeeed;
+  --badge-unavailable-text: #8f2f22;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #17181a;
+    --surface: #212326;
+    --text: #eceae6;
+    --muted: #a4a49d;
+    --border: #34363a;
+    --accent: #4fb28c;
+    --accent-strong: #6bc9a4;
+    --accent-contrast: #10231c;
+    --focus: #6bc9a4;
+    --danger-bg: #3a211d;
+    --danger-text: #f2b8ad;
+    --badge-available: #1d3527;
+    --badge-available-text: #93dcae;
+    --badge-pending: #39301a;
+    --badge-pending-text: #ecc668;
+    --badge-adopted: #27283c;
+    --badge-adopted-text: #b3b7ec;
+    --badge-draft: #2b2c2e;
+    --badge-draft-text: #a4a49d;
+    --badge-unavailable: #3a211d;
+    --badge-unavailable-text: #f2b8ad;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: var(--bg);
+  color: var(--text);
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    'Helvetica Neue',
+    Arial,
+    sans-serif;
+  line-height: 1.6;
+}
+
+.container {
+  max-width: 60rem;
+  margin-inline: auto;
+  padding: 1.5rem 1.25rem 4rem;
+}
+
+h1,
+h2,
+h3 {
+  line-height: 1.25;
+  margin: 0 0 0.75rem;
+}
+
+p {
+  margin: 0 0 1rem;
+}
+
+a {
+  color: var(--accent-strong);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+}
+
+.grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  padding: 0;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.button {
+  display: inline-block;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 0.55rem 1.1rem;
+  font-size: 1rem;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.button:hover {
+  background: var(--accent-strong);
+}
+
+.button-secondary {
+  background: transparent;
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.button-secondary:hover {
+  background: var(--bg);
+}
+
+.badge {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 0.15rem 0.65rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+.badge[data-status='available'] {
+  background: var(--badge-available);
+  color: var(--badge-available-text);
+}
+
+.badge[data-status='pending'] {
+  background: var(--badge-pending);
+  color: var(--badge-pending-text);
+}
+
+.badge[data-status='adopted'] {
+  background: var(--badge-adopted);
+  color: var(--badge-adopted-text);
+}
+
+.badge[data-status='draft'] {
+  background: var(--badge-draft);
+  color: var(--badge-draft-text);
+}
+
+.badge[data-status='unavailable'] {
+  background: var(--badge-unavailable);
+  color: var(--badge-unavailable-text);
+}
+
+.error {
+  background: var(--danger-bg);
+  color: var(--danger-text);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+thead th {
+  background: var(--bg);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+tbody tr:last-child td {
+  border-bottom: none;
+}
+
+label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+}
+
+input[type='email'],
+input[type='password'],
+input[type='text'] {
+  width: 100%;
+  max-width: 24rem;
+  padding: 0.55rem 0.75rem;
+  font-size: 1rem;
+  font-family: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+fieldset {
+  border: none;
+  margin: 0 0 1rem;
+  padding: 0;
+}
+
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
