@@ -7,6 +7,8 @@ Contents:
 
 - [Staff roles](#staff-roles)
 - [Building your public website](#building-your-public-website-site)
+  - [One-click launch](#one-click-launch)
+  - [Custom domains (Beta)](#custom-domains-beta)
 - [Syndication](#syndication-sync)
 - [RSS feed](#rss-feed)
 - [Demo/development credentials (DEV ONLY)](#demo-development-credentials-dev-only)
@@ -40,7 +42,17 @@ Capability matrix (from `docs/design/03-api.md` §2.1):
 Open **Site** from `/dashboard`. The page is titled "Shelter site" and shows
 your slug and last-published time.
 
-Under **Site content**:
+### One-click launch
+
+If the site was never published, a **Launch** card appears at the top of
+`/site` with a single **Launch your shelter site** button
+(`data-testid="setup-cta"`). It fills in sensible defaults (hero copy, theme,
+colors), publishes immediately, and reports your live subdomain —
+"Your site is live at `https://<slug>.<SITES_ROOT_DOMAIN>` (N adoptable
+animals)" (`data-testid="setup-done"`) — with a **Customize** link down to the
+form below. You can always fine-tune everything afterwards and re-publish.
+
+### Site content
 
 | Field | Notes |
 | --- | --- |
@@ -60,11 +72,36 @@ atomic: all pages are rendered to object storage and a pointer object
 ```
 <API>/public/v1/sites/<slug>            # index.html
 <API>/public/v1/sites/<slug>/animals.html
-<API>/public/v1/sites/<slug>/sitemap.txt
+<API>/public/v1/sites/<slug>/sitemap.txt (and llms.txt)
 ```
 
 The publish response reports `slug`, `buildId`, `publishedAt`, and the animal
 count included.
+
+### Subdomain serving
+
+Besides the API path above, your site is served directly at
+`<slug>.<SITES_ROOT_DOMAIN>` (dev default: `happytail.sites.localhost`). The
+web app inspects the `Host` header: hosts listed in `APP_PRIMARY_HOSTS` get the
+normal app; anything else is looked up as a shelter site and rewritten to its
+published pages. Production needs wildcard DNS `*.<SITES_ROOT_DOMAIN>` → your
+web host plus a TLS certificate covering that wildcard — see
+[Deployment Guide](../deploy/overview.md#shelter-sites-subdomains--custom-domains).
+
+### Custom domains (Beta)
+
+Under **Custom domain** on `/site` you can claim your own hostname
+(e.g. `adopt.example.org`):
+
+1. Enter the domain and click **Add domain** — it's stored as `pending` and a
+   verification token is shown.
+2. Create a DNS TXT record named `_kithlink.<domain>` with value
+   `kithlink-verify=<token>`.
+3. Click **Verify** once DNS has propagated. Verified domains are listed with
+   an `verified` badge; remove them with the delete action.
+
+Until TXT verification passes, the domain stays `pending`. If Verify keeps
+failing, see [Troubleshooting](troubleshooting.md#custom-domain-stuck-in-pending).
 
 ## Syndication (`/sync`)
 
@@ -109,7 +146,7 @@ see [Troubleshooting](troubleshooting.md).
 Every shelter has an RSS feed with zero configuration:
 
 ```
-<API>/public/v1/sites/<slug>/rss.xml
+<API>/public/v1/feed/shelters/<slug>/rss.xml
 ```
 
 It lists currently available animals (name, species, breed, description),

@@ -1,4 +1,4 @@
-import { BadRequestException, Controller, Get, Inject, NotFoundException, Param, Res } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Inject, NotFoundException, Param, Query, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { TenantService } from '../db.module';
 import { S3Service } from '../s3/s3.module';
@@ -15,6 +15,39 @@ export class PublicSitesController {
     @Inject(TenantService) private readonly tenants: TenantService,
     @Inject(S3Service) private readonly s3: S3Service,
   ) {}
+
+  @Get('resolve')
+  async resolve(@Query('host') rawHost: string | undefined, @Res() res: Response): Promise<void> {
+    const rootDomain = (process.env.SITES_ROOT_DOMAIN ?? 'sites.localhost').toLowerCase();
+    const host = (rawHost ?? '').trim().toLowerCase().replace(/:\d+$/, '');
+    let slug: string | null = null;
+    if (host.length > 0 && host.endsWith(`.${rootDomain}`)) {
+      const candidate = host.slice(0, -(rootDomain.length + 1));
+      if (SLUG_RE.test(candidate)) {
+        const found = (await this.tenants.withTenant(ANON_CTX, async sql => {
+          const rows = (await sql`
+            select 1
+            from sites s join shelters sh on sh.id = s.shelter_id
+            where sh.slug = ${candidate} limit 1`) as unknown as unknown[];
+          return rows[0] != null;
+        })) as boolean;
+        slug = found ? candidate : null;
+      }
+    } else if (host.length > 0) {
+      const rows = (await this.tenants.service(async sql => {
+        return (await sql`
+          select sh.slug
+          from custom_domains cd join shelters sh on sh.id = cd.shelter_id
+          where cd.domain = ${host} and cd.verified_at is not null limit 1`) as unknown as {
+          slug: string;
+        }[];
+      })) as { slug: string }[];
+      slug = rows[0]?.slug ?? null;
+    }
+    res.setHeader('Cache-Control', 'public, max-age=15');
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.send({ slug });
+  }
 
   @Get(':slug')
   async index(@Param('slug') slug: string, @Res() res: Response): Promise<void> {

@@ -42,6 +42,31 @@ export const siteStatusSchema = z.object({
 });
 export type SiteStatus = z.infer<typeof siteStatusSchema>;
 
+export const customDomainSchema = z.object({
+  id: z.string().uuid(),
+  domain: z.string(),
+  verified: z.boolean(),
+  verificationToken: z.string(),
+});
+export type CustomDomain = z.infer<typeof customDomainSchema>;
+
+export const addCustomDomainSchema = z.object({
+  domain: z
+    .string()
+    .min(4)
+    .max(253)
+    .regex(/^[a-z0-9.-]+\.[a-z]{2,}$/),
+});
+export type AddCustomDomainInput = z.infer<typeof addCustomDomainSchema>;
+
+export const siteSetupResponseSchema = z.object({
+  slug: z.string(),
+  subdomain: z.string(),
+  publishedAt: z.string().datetime(),
+  animalCount: z.number().int(),
+});
+export type SiteSetupResponse = z.infer<typeof siteSetupResponseSchema>;
+
 export const syncProviders = ['petfinder', 'adoptapet'] as const;
 export const syncProviderSchema = z.enum(syncProviders);
 export type SyncProvider = (typeof syncProviders)[number];

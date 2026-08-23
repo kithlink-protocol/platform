@@ -23,8 +23,9 @@ websites, and listing syndication.
   lifecycle. Covers the admin app at `http://localhost:3001` in dev
   (`/`, `/dashboard`, `/applications`).
 - [Shelter Admin Guide](guide/shelter-admin.md) — administration: staff roles
-  and capabilities matrix, publishing your public website (`/site`),
-  Petfinder syndication (`/sync`), and the RSS fallback feed.
+  and capabilities matrix, one-click site launch, publishing your public
+  website (`/site`), subdomain serving, custom domains (Beta), Petfinder
+  syndication (`/sync`), and the RSS fallback feed.
 
 ### For operators
 
@@ -51,12 +52,16 @@ websites, and listing syndication.
   - [06 CMS / site generator](design/06-cms-site-generator.md)
   - [07 Security & privacy](design/07-security-privacy.md)
   - [08 Deployment & ops](design/08-deployment-ops.md)
-  - [09 Roadmap](design/09-roadmap.md)
+  - [09 Roadmap](design/09-roadmap.md) — milestones M0–M4 shipped + current backlog
+  - [10 Visual design](design/10-visual-design.md)
 
 ### Reference
 
-- [Troubleshooting](guide/troubleshooting.md) — login loops, site publish 404s,
-  sync dry-run confusion, cookie/RLS errors, migration recovery, rate limits.
+- [Implementation status](implementation-status.md) — capability matrix: what's
+  Shipped/Beta/Planned, with code paths and doc links.
+- [Troubleshooting](guide/troubleshooting.md) — login loops, site publish
+  404s, subdomain reachability, pending custom domains, sync dry-run
+  confusion, cookie/RLS errors, migration recovery, rate limits.
 - [SECURITY.md](../SECURITY.md) — how to report vulnerabilities.
 
 ## Audiences at a glance

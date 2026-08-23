@@ -1,12 +1,18 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { randomUUID } from 'node:crypto';
+import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { randomBytes, randomUUID } from 'node:crypto';
+import { resolveTxt } from 'node:dns/promises';
 import {
+  customDomainSchema,
   publishResponseSchema,
   siteBrandSchema,
   siteConfigResponseSchema,
+  siteSetupResponseSchema,
+  type AddCustomDomainInput,
+  type CustomDomain,
   type PublishResponse,
   type SiteConfigInput,
   type SiteConfigResponse,
+  type SiteSetupResponse,
 } from '@kithlink/contracts';
 import type { AnySql, TenantContext } from '@kithlink/db';
 import { AuditService } from '../../common/audit.service';
@@ -30,6 +36,26 @@ interface SiteRow {
   published_at: string | Date | null;
   slug: string;
   name: string;
+}
+
+interface CustomDomainRow {
+  id: string;
+  domain: string;
+  verification_token: string;
+  verified_at: string | Date | null;
+}
+
+function isUniqueViolation(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && (err as { code?: string }).code === '23505';
+}
+
+function mapDomainRow(row: CustomDomainRow): CustomDomain {
+  return customDomainSchema.parse({
+    id: row.id,
+    domain: row.domain,
+    verified: row.verified_at != null,
+    verificationToken: row.verification_token,
+  });
 }
 
 function mapSiteRow(row: SiteRow): SiteConfigResponse {
@@ -133,6 +159,129 @@ export class SitesService {
 
   loadRenderAnimals(ctx: TenantContext, shelterId: string): Promise<RenderAnimal[]> {
     return this.tenants.withTenant(ctx, sql => loadAvailable(sql, shelterId));
+  }
+
+  async setupOneClick(
+    ctx: TenantContext,
+    actorId: string,
+    shelterId: string,
+  ): Promise<SiteSetupResponse> {
+    const site = await this.getOrCreate(ctx, shelterId);
+    if (site.hero_title === '' && site.hero_body === '') {
+      await this.tenants.withTenant(ctx, async sql => {
+        await sql`
+          update sites s set
+            theme_slug = 'default',
+            hero_title = sh.name,
+            hero_body = 'Meet our adoptable friends...'
+          from shelters sh
+          where sh.id = s.shelter_id and s.shelter_id = ${shelterId}::uuid`;
+      });
+    }
+    const published = await this.publish(ctx, actorId, shelterId);
+    await this.tenants.withTenant(ctx, sql =>
+      this.audit.append(sql, actorId, shelterId, 'site.setup_one_click', 'site', shelterId, {}),
+    );
+    return siteSetupResponseSchema.parse({
+      slug: published.slug,
+      subdomain: `${published.slug}.${process.env.SITES_ROOT_DOMAIN ?? 'sites.localhost'}`,
+      publishedAt: published.publishedAt,
+      animalCount: published.animalCount,
+    });
+  }
+
+  async listCustomDomains(ctx: TenantContext, shelterId: string): Promise<CustomDomain[]> {
+    return this.tenants.withTenant(ctx, async sql => {
+      const rows = (await sql`
+        select id, domain, verification_token, verified_at
+        from custom_domains
+        where shelter_id = ${shelterId}::uuid
+        order by created_at`) as unknown as CustomDomainRow[];
+      return rows.map(mapDomainRow);
+    });
+  }
+
+  async addCustomDomain(
+    ctx: TenantContext,
+    actorId: string,
+    shelterId: string,
+    input: AddCustomDomainInput,
+  ): Promise<CustomDomain & { instructions: string }> {
+    const token = randomBytes(16).toString('hex');
+    const domain = input.domain.toLowerCase();
+    try {
+      return await this.tenants.withTenant(ctx, async sql => {
+        const rows = (await sql`
+          insert into custom_domains (shelter_id, domain, verification_token)
+          values (${shelterId}::uuid, ${domain}, ${token})
+          returning id, domain, verification_token, verified_at`) as unknown as CustomDomainRow[];
+        const row = rows[0];
+        if (!row) throw new ConflictException('Domain is already registered');
+        await this.audit.append(sql, actorId, shelterId, 'site.domain.added', 'custom_domain', row.id, {
+          domain,
+        });
+        return {
+          ...mapDomainRow(row),
+          instructions: `Create TXT record _kithlink.${domain} with value kithlink-verify=${token}`,
+        };
+      });
+    } catch (err) {
+      if (isUniqueViolation(err)) throw new ConflictException('Domain is already registered');
+      throw err;
+    }
+  }
+
+  async verifyCustomDomain(
+    ctx: TenantContext,
+    actorId: string,
+    shelterId: string,
+    domainId: string,
+  ): Promise<CustomDomain> {
+    const row = await this.tenants.withTenant(ctx, async sql => {
+      const rows = (await sql`
+        select id, domain, verification_token, verified_at
+        from custom_domains
+        where id = ${domainId}::uuid and shelter_id = ${shelterId}::uuid limit 1`) as unknown as CustomDomainRow[];
+      if (!rows[0]) throw new NotFoundException('Domain not found');
+      return rows[0];
+    });
+    if (row.verified_at != null) return mapDomainRow(row);
+    let verified = false;
+    try {
+      const records = await resolveTxt(`_kithlink.${row.domain}`);
+      const expected = `kithlink-verify=${row.verification_token}`;
+      verified = records.some(chunks => chunks.join('') === expected);
+    } catch {
+      verified = false;
+    }
+    if (!verified) throw new BadRequestException('Verification TXT record not found yet');
+    return this.tenants.withTenant(ctx, async sql => {
+      const updated = (await sql`
+        update custom_domains set verified_at = now()
+        where id = ${domainId}::uuid and shelter_id = ${shelterId}::uuid
+        returning id, domain, verification_token, verified_at`) as unknown as CustomDomainRow[];
+      if (!updated[0]) throw new NotFoundException('Domain not found');
+      await this.audit.append(sql, actorId, shelterId, 'site.domain.verified', 'custom_domain', row.id, {
+        domain: row.domain,
+      });
+      return mapDomainRow(updated[0]);
+    });
+  }
+
+  async deleteCustomDomain(
+    ctx: TenantContext,
+    actorId: string,
+    shelterId: string,
+    domainId: string,
+  ): Promise<void> {
+    await this.tenants.withTenant(ctx, async sql => {
+      const rows = (await sql`
+        delete from custom_domains
+        where id = ${domainId}::uuid and shelter_id = ${shelterId}::uuid
+        returning id`) as unknown as { id: string }[];
+      if (!rows[0]) throw new NotFoundException('Domain not found');
+      await this.audit.append(sql, actorId, shelterId, 'site.domain.removed', 'custom_domain', domainId, {});
+    });
   }
 }
 

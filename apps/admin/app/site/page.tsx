@@ -5,14 +5,26 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState, type FormEvent } from 'react';
 
 import { ApiError, apiFetch } from '@/lib/api';
-import type { AuthSession, SiteConfigResponse } from '@kithlink/contracts';
+import type { AuthSession, CustomDomain, SiteConfigResponse } from '@kithlink/contracts';
 
 interface PublishInfo {
   slug: string;
   publishedAt: string;
 }
 
+interface SetupInfo {
+  slug: string;
+  subdomain: string;
+  publishedAt: string;
+  animalCount: number;
+}
+
 const DEFAULT_COLOR = '#2563eb';
+const ROOT_DOMAIN = process.env.NEXT_PUBLIC_SITES_ROOT_DOMAIN ?? 'sites.localhost';
+
+function siteUrl(subdomain: string): string {
+  return `${subdomain.endsWith('.localhost') ? 'http' : 'https'}://${subdomain}`;
+}
 
 export default function SitePage() {
   const router = useRouter();
@@ -29,6 +41,15 @@ export default function SitePage() {
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
   const [published, setPublished] = useState<PublishInfo | null>(null);
+  const [settingUp, setSettingUp] = useState(false);
+  const [setupError, setSetupError] = useState<string | null>(null);
+  const [setupInfo, setSetupInfo] = useState<SetupInfo | null>(null);
+  const [domains, setDomains] = useState<CustomDomain[]>([]);
+  const [domainsError, setDomainsError] = useState<string | null>(null);
+  const [domainInput, setDomainInput] = useState('');
+  const [addingDomain, setAddingDomain] = useState(false);
+  const [verifyingId, setVerifyingId] = useState<string | null>(null);
+  const [domainActionError, setDomainActionError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -119,6 +140,77 @@ export default function SitePage() {
     }
   }
 
+  async function onSetup() {
+    if (!shelterId) return;
+    setSettingUp(true);
+    setSetupError(null);
+    try {
+      const res = await apiFetch<SetupInfo>(
+        `/admin/v1/shelters/${encodeURIComponent(shelterId)}/site/setup`,
+        { method: 'POST' },
+      );
+      setSetupInfo(res);
+      setPublished({ slug: res.slug, publishedAt: res.publishedAt });
+      setPublishedAt(res.publishedAt);
+    } catch (err) {
+      setSetupError(err instanceof Error ? err.message : 'Could not launch the site.');
+    } finally {
+      setSettingUp(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!shelterId) return;
+    let cancelled = false;
+    apiFetch<CustomDomain[]>(`/admin/v1/shelters/${encodeURIComponent(shelterId)}/site/domains`)
+      .then((data) => {
+        if (!cancelled) setDomains(data);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled)
+          setDomainsError(err instanceof Error ? err.message : 'Could not load custom domains.');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [shelterId]);
+
+  async function onAddDomain(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!shelterId || domainInput.trim().length === 0) return;
+    setAddingDomain(true);
+    setDomainActionError(null);
+    try {
+      const res = await apiFetch<CustomDomain & { instructions: string }>(
+        `/admin/v1/shelters/${encodeURIComponent(shelterId)}/site/domains`,
+        { method: 'POST', body: JSON.stringify({ domain: domainInput.trim().toLowerCase() }) },
+      );
+      setDomains((prev) => [...prev, res]);
+      setDomainInput('');
+    } catch (err) {
+      setDomainActionError(err instanceof Error ? err.message : 'Could not add the domain.');
+    } finally {
+      setAddingDomain(false);
+    }
+  }
+
+  async function onVerifyDomain(id: string) {
+    if (!shelterId) return;
+    setVerifyingId(id);
+    setDomainActionError(null);
+    try {
+      const res = await apiFetch<CustomDomain>(
+        `/admin/v1/shelters/${encodeURIComponent(shelterId)}/site/domains/${encodeURIComponent(id)}/verify`,
+        { method: 'POST' },
+      );
+      setDomains((prev) => prev.map((d) => (d.id === res.id ? res : d)));
+    } catch (err) {
+      setDomainActionError(err instanceof Error ? err.message : 'Could not verify the domain yet.');
+    } finally {
+      setVerifyingId(null);
+    }
+  }
+
   if (loadError) {
     return (
       <main>
@@ -154,7 +246,57 @@ export default function SitePage() {
         </p>
       </header>
 
-      <section className="card" aria-labelledby="site-form-heading">
+      <section className="card section-gap" aria-labelledby="onboarding-heading">
+        <h2 id="onboarding-heading" className="t-heading">
+          Launch
+        </h2>
+        {!shownPublishedAt && !setupInfo ? (
+          <>
+            <p className="t-meta">
+              Publish your shelter site in one click with sensible defaults and a{' '}
+              {ROOT_DOMAIN} subdomain.
+            </p>
+            <button
+              data-testid="setup-cta"
+              className="btn btn-primary"
+              type="button"
+              onClick={onSetup}
+              disabled={settingUp}
+            >
+              {settingUp ? 'Launching…' : 'Launch your shelter site'}
+            </button>
+            {setupError ? (
+              <p role="alert" className="alert alert-danger">
+                {setupError}
+              </p>
+            ) : null}
+          </>
+        ) : setupInfo ? (
+          <div data-testid="setup-done">
+            <p>
+              Your site is live at{' '}
+              <a href={siteUrl(setupInfo.subdomain)} target="_blank" rel="noreferrer">
+                {siteUrl(setupInfo.subdomain)}
+              </a>{' '}
+              ({setupInfo.animalCount} adoptable animals)
+            </p>
+            <a href="#site-form">Customize</a>
+          </div>
+        ) : (
+          <p className="t-meta">
+            Your subdomain:{' '}
+            <a
+              href={siteUrl(`${slug}.${ROOT_DOMAIN}`)}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {slug}.{ROOT_DOMAIN}
+            </a>
+          </p>
+        )}
+      </section>
+
+      <section id="site-form" className="card" aria-labelledby="site-form-heading">
         <h2 id="site-form-heading" className="t-heading">
           Site content
         </h2>
@@ -256,6 +398,80 @@ export default function SitePage() {
           </p>
         ) : (
           <p className="t-meta">Not published yet.</p>
+        )}
+      </section>
+
+      <section className="card section-gap" aria-labelledby="domains-heading">
+        <h2 id="domains-heading" className="t-heading">
+          Custom domain
+        </h2>
+        {domainsError ? (
+          <p role="alert" className="alert alert-danger">
+            {domainsError}
+          </p>
+        ) : null}
+        <form onSubmit={onAddDomain}>
+          <div className="form-row">
+            <label htmlFor="domainInput">Domain</label>
+            <input
+              id="domainInput"
+              name="domainInput"
+              data-testid="domain-input"
+              type="text"
+              placeholder="adopt.example.org"
+              className="input"
+              value={domainInput}
+              onChange={(e) => setDomainInput(e.target.value)}
+            />
+          </div>
+          <button
+            className="btn btn-primary"
+            type="submit"
+            disabled={addingDomain || domainInput.trim().length === 0}
+          >
+            {addingDomain ? 'Adding…' : 'Add domain'}
+          </button>
+        </form>
+        {domainActionError ? (
+          <p role="alert" className="alert alert-danger">
+            {domainActionError}
+          </p>
+        ) : null}
+        {domains.length > 0 ? (
+          <ul>
+            {domains.map((d) => (
+              <li key={d.id} data-testid="domain-row">
+                <span>{d.domain}</span>{' '}
+                <span className={d.verified ? 'alert alert-ok' : 't-meta'}>
+                  {d.verified ? 'verified' : 'pending'}
+                </span>
+                <div className="form-row">
+                  <code>{d.verificationToken}</code>
+                </div>
+                {!d.verified ? (
+                  <>
+                    <div className="form-row">
+                      <code>
+                        Create TXT record _kithlink.{d.domain} with value kithlink-verify=
+                        {d.verificationToken}
+                      </code>
+                    </div>
+                    <button
+                      data-testid="domain-verify"
+                      className="btn btn-primary"
+                      type="button"
+                      onClick={() => onVerifyDomain(d.id)}
+                      disabled={verifyingId === d.id}
+                    >
+                      {verifyingId === d.id ? 'Verifying…' : 'Verify'}
+                    </button>
+                  </>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="t-meta">No custom domains yet.</p>
         )}
       </section>
     </main>

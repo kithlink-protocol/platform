@@ -1,5 +1,5 @@
-import { Body, Controller, Get, Inject, Param, Post, Put, UseGuards } from '@nestjs/common';
-import { siteConfigSchema } from '@kithlink/contracts';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Inject, Param, Post, Put, UseGuards } from '@nestjs/common';
+import { addCustomDomainSchema, siteConfigSchema } from '@kithlink/contracts';
 import type { TenantContext } from '@kithlink/db';
 import { Principal } from '../../common/principal';
 import { RequireStaffRole, StaffRoleGuard } from '../../common/roles';
@@ -39,5 +39,49 @@ export class AdminSitesController {
   @Post('publish')
   publish(@Principal() principal: Principal, @Param('shelterId') shelterId: string) {
     return this.sites.publish(this.ctxOf(principal, shelterId), principal.user.id, shelterId);
+  }
+
+  @Post('setup')
+  @RequireStaffRole('coordinator')
+  setup(@Principal() principal: Principal, @Param('shelterId') shelterId: string) {
+    return this.sites.setupOneClick(this.ctxOf(principal, shelterId), principal.user.id, shelterId);
+  }
+
+  @Get('domains')
+  @RequireStaffRole('coordinator')
+  listDomains(@Principal() principal: Principal, @Param('shelterId') shelterId: string) {
+    return this.sites.listCustomDomains(this.ctxOf(principal, shelterId), shelterId);
+  }
+
+  @Post('domains')
+  @RequireStaffRole('coordinator')
+  addDomain(
+    @Principal() principal: Principal,
+    @Param('shelterId') shelterId: string,
+    @Body() body: unknown,
+  ) {
+    const input = addCustomDomainSchema.parse(body);
+    return this.sites.addCustomDomain(this.ctxOf(principal, shelterId), principal.user.id, shelterId, input);
+  }
+
+  @Post('domains/:id/verify')
+  @RequireStaffRole('coordinator')
+  verifyDomain(
+    @Principal() principal: Principal,
+    @Param('shelterId') shelterId: string,
+    @Param('id') id: string,
+  ) {
+    return this.sites.verifyCustomDomain(this.ctxOf(principal, shelterId), principal.user.id, shelterId, id);
+  }
+
+  @Delete('domains/:id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @RequireStaffRole('coordinator')
+  deleteDomain(
+    @Principal() principal: Principal,
+    @Param('shelterId') shelterId: string,
+    @Param('id') id: string,
+  ): Promise<void> {
+    return this.sites.deleteCustomDomain(this.ctxOf(principal, shelterId), principal.user.id, shelterId, id);
   }
 }

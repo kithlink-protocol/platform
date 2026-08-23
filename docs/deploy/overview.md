@@ -57,6 +57,8 @@ Secrets you **must** change before first migrate:
 | `DATABASE_URL` / `DATABASE_OWNER_URL` | Dev passwords (`kithlink_app_dev`, `kithlink_dev`) are public. Generate: `openssl rand -hex 16`. The owner URL is for migrations only — never give it to the API process. |
 | `KITHLINK_MASTER_KEY` | Encrypts addresses and artifact files. Generate: `openssl rand -base64 32`. Never reuse across environments; rotating crypto-shreds old data. |
 | `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | Dev MinIO values are public — rotate. |
+| `SITES_ROOT_DOMAIN` | Root domain for shelter sites, served as `<slug>.<SITES_ROOT_DOMAIN>` (dev default `sites.localhost`). Set a real domain in prod and point wildcard DNS at the web host (see below). Mirror it in `NEXT_PUBLIC_SITES_ROOT_DOMAIN` for admin-app links. |
+| `APP_PRIMARY_HOSTS` | Comma-separated hosts that belong to the app itself (e.g. `kithlink.example.org`). Any *other* Host is treated as a shelter site subdomain. Defaults to localhost only; set your prod app host here or the app itself will be treated as a site. |
 
 The complete variable matrix lives in
 [Self-hosting §2 Environment matrix](../self-hosting.md#2-environment-matrix).
@@ -115,6 +117,20 @@ curl localhost:4000/readyz           # {"ok":true}      checks DB connectivity
 curl localhost:4000/public/v1/version                # {"name":"kithlink","version":"…"}
 curl "localhost:4000/public/v1/shelters"             # public registry responds
 ```
+
+## Shelter sites: subdomains & custom domains
+
+- **Subdomains** — shelter sites are served at `<slug>.<SITES_ROOT_DOMAIN>` by
+  the web app's host middleware (`apps/web/middleware.ts`). Production
+  requires wildcard DNS `*.<SITES_ROOT_DOMAIN>` → your web host **and** a TLS
+  certificate covering that wildcard (Caddy handles this automatically for
+  `*.sites.example.org`).
+- **Custom domains (Beta)** — shelters claim their own hostnames on the admin
+  `/site` page; ownership is proven with a DNS TXT record
+  `_kithlink.<domain>` = `kithlink-verify=<token>` before the domain is
+  trusted. No server-side DNS automation is needed, but make sure your proxy
+  routes unrecognised Hosts to the web app and terminates TLS for customer
+  domains (Caddy on-demand TLS or a cert per claimed domain).
 
 ## Upgrades
 

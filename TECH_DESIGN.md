@@ -20,7 +20,13 @@
 | 06 | [Headless CMS & Site Generator](./docs/design/06-cms-site-generator.md) | Rendering pipeline, theme SDK, custom domains, publish flow |
 | 07 | [Security & Privacy](./docs/design/07-security-privacy.md) | Threat model (STRIDE), consent architecture, PII handling, audit chain, incident response |
 | 08 | [Deployment & Operations](./docs/design/08-deployment-ops.md) | Docker Compose / Helm topology, CI/CD, observability, SLOs, capacity & cost model, testing strategy |
-| 09 | [Roadmap, Risks & Open Questions](./docs/design/09-roadmap.md) | Milestones M0–M4, risk register, decision log |
+| 09 | [Roadmap, Risks & Open Questions](./docs/design/09-roadmap.md) | Milestones M0–M4 (shipped), remaining backlog, risk register, decision log |
+| 10 | [Visual Design](./docs/design/10-visual-design.md) | Geist-informed visual system: tokens, typography, components across web/admin/generated sites |
+
+CI reality check: there is no status badge — CI is
+[`.github/workflows/ci.yml`](./.github/workflows/ci.yml), which runs on pushes
+to `main` and on PRs (build → typecheck → lint → unit/integration against
+Postgres/MinIO → Playwright e2e journeys). A green run is the readiness signal.
 
 ---
 

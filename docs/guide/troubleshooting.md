@@ -7,6 +7,8 @@ Contents:
 
 - [Login loops / can't stay signed in](#login-loops--cant-stay-signed-in)
 - [Site returns 404 after publish](#site-returns-404-after-publish)
+- [Shelter site not reachable on its subdomain](#shelter-site-not-reachable-on-its-subdomain)
+- [Custom domain stuck in pending](#custom-domain-stuck-in-pending)
 - [Sync dry-run shows decisions but no Petfinder listing](#sync-dry-run-shows-decisions-but-no-petfinder-listing)
 - ["Missing session cookie" on API calls from other localhost ports](#missing-session-cookie-on-api-calls-from-other-localhost-ports)
 - [Migration fails mid-way](#migration-fails-mid-way)
@@ -49,6 +51,46 @@ publish 404s immediately.
    saved fine. Re-publish from the staff app's **Site** page (**Publish**
    button) to regenerate it.
 3. Slug typos matter: slugs are lowercase `[a-z0-9-]`.
+
+## Shelter site not reachable on its subdomain
+
+**Symptom:** `https://<slug>.sites.example.org` shows the app (login page) or
+errors instead of the shelter site.
+
+**Checks:**
+
+1. **Wildcard DNS missing.** Subdomain serving needs
+   `*.<SITES_ROOT_DOMAIN>` pointed at your web host, plus a TLS cert covering
+   the wildcard. Without the wildcard record, `<slug>.…` simply doesn't
+   resolve.
+2. **`APP_PRIMARY_HOSTS` wrong on the web app.** The web middleware treats any
+   Host **not** in `APP_PRIMARY_HOSTS` as a shelter site and vice versa. If
+   your prod app host isn't listed there, the app itself gets rewritten to a
+   site lookup; if a site host is accidentally listed, it renders the normal
+   app. Values are comma-separated `host[:port]`, matched against the full
+   `Host` header or bare hostname.
+3. **Resolve endpoint failing.** The middleware asks the API
+   `GET /public/v1/sites/resolve?host=<host>`; check API logs for that call —
+   if `API_URL` is wrong or the API is down, middleware silently falls through
+   to the normal app.
+
+## Custom domain stuck in pending
+
+**Symptom:** Domain added on admin `/site` stays `pending`; clicking **Verify**
+returns "Verification TXT record not found yet".
+
+**Fix:** Create the TXT record exactly as shown in the UI:
+
+- **Name:** `_kithlink.<domain>` (e.g. `_kithlink.adopt.example.org`)
+- **Value:** `kithlink-verify=<token>`
+
+Then wait for DNS propagation/TTL to expire (often 5–60 min) and click
+**Verify** again — the server queries the public DNS resolver each time, so an
+old cached NXDOMAIN/missing answer can persist until the TTL rolls. Verify the
+record with `dig TXT _kithlink.<domain> +short` before retrying. If `dig`
+shows the right value but verification still fails, check that your DNS
+provider didn't auto-append the zone apex (name should be
+`_kithlink.<domain>.` fully qualified).
 
 ## Sync dry-run shows decisions but no Petfinder listing
 

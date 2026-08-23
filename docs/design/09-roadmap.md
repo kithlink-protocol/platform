@@ -2,17 +2,43 @@
 
 ## 1. Milestones
 
-| Phase | Scope (acceptance criteria) | Est. |
+M0–M4 are **shipped** (v1.0.0-rc.1). Scope landed as follows (commit subjects
+summarised; see `git log`):
+
+| Phase | Status | What actually shipped |
 | --- | --- | --- |
-| **M0 — Foundation** | Monorepo scaffold; Compose dev env; auth+sessions; shelters/staff/RBAC; RLS live + CI policy test; animals CRUD + public registry API | 6 wks |
-| **M1 — Applicant loop** | PWA profile; artifact upload (presign, envelope encryption); OCR+LLM pipeline v1 with manual fallback; applications + status machine + consent grants; email notifications | 8 wks |
-| **M2 — Verification network** | Verifications UX (landlord-call flow, side-by-side audit editor); network_verified surfacing to Shelter B; applicant consent dashboard w/ revoke; audit chain | 6 wks |
-| **M3 — Sites & syndication** | Theme SDK + default theme ×2; block CMS + renderer worker + atomic publishes; custom subdomains; Petfinder push adapter + RSS export | 8 wks |
-| **M4 — Hardening & GA** | Load tests at SLOs; DR drills; Adopt-a-Pet adapter; docs/quickstart for self-hosters; security review + pen test; AGPLv3 repo public launch | 6 wks |
+| **M0 — Foundation** | ✅ Shipped (`7de5b8d`) | Monorepo, RLS-secured DB, core API (auth/sessions, shelters/staff/RBAC, animals CRUD, public registry), web/admin shells |
+| **M1 — Applicant loop** | ✅ Shipped (`7d5c488`) | Profile, artifact upload w/ presign + envelope encryption, parse skeleton with manual fallback (LLM stage off unless configured), applications + status machine + consent grants, email notifications; Playwright e2e gate added |
+| **M2 — Verification network** | ✅ Shipped (`c311d72`) | Verification actions on artifact cards (confirm landlord call / mark discrepancy / accept prior verification), network_verified surfacing, consents list + revoke API, append-only audit log |
+| **M3 — Sites & syndication** | ✅ Shipped (`13f1938`) | Headless CMS config + renderer with atomic publishes, two themes, one-click setup, subdomain serving via web middleware, custom-domain claim→TXT verify (Beta), Petfinder push adapter (dry-run/live), RSS export |
+| **M4 — Hardening & GA** | ✅ Shipped (`7506bd7`) | Rate limiting, version/health endpoints, load smoke script, Adopt-a-Pet adapter (API level), self-host docs/guides, CI e2e green; repo public at v1.0.0-rc.1 |
+| Post-M4 polish | ✅ Shipped (`4aa31f5`, `41da062`) | Geist-informed visual system across web/admin/generated sites, user guides + deployment/troubleshooting docs |
 
-Post-GA backlog: OIDC SSO · clinic-API verifications · inbound Petfinder inquiries · foster scheduling module · i18n (ES first).
+Scope deltas vs. the original plan: verifications shipped as per-artifact
+actions rather than a side-by-side audit editor; LLM extraction is opt-in
+(manual fallback is the default path); Adopt-a-Pet exists as an adapter but is
+not yet in the UI dropdown; load testing is a manual smoke script, not k6 in
+CI.
 
-## 2. Risk Register
+## 2. Remaining backlog (current truth)
+
+- Dedicated consents UI page (revoke currently API-only: `GET/DELETE /app/v1/me/consents`)
+- Animal create/edit UI forms (CRUD is admin-API only)
+- Staff-management UI (staff endpoints are admin-API only)
+- Adopt-a-Pet option in the `/sync` provider dropdown (adapter exists)
+- Magic-link email verification (accounts today are email+password only)
+- TOTP second-factor UI
+- Clinic-API verifications
+- Petfinder inbound inquiries (outbound push only today)
+- Live LLM extraction wired on by default (currently operator opt-in)
+- i18n (ES first)
+- Managed-cloud Helm chart polish
+- k6 load tests in CI (manual `scripts/load/smoke.js` today)
+- Swap to actual Geist font once Next.js supports it (visual system is Geist-informed)
+
+Longer-term ideas carried from planning: OIDC SSO · foster scheduling module.
+
+## 3. Risk Register
 
 | # | Risk | Likelihood×Impact | Mitigation |
 | --- | --- | --- | --- |
@@ -25,7 +51,7 @@ Post-GA backlog: OIDC SSO · clinic-API verifications · inbound Petfinder inqui
 | R7 | Self-hosters misconfigure storage/security | M×M | Secure-by-default Compose (generated secrets, TLS via Caddy), config linter `kithlink doctor`, hardening guide |
 | R8 | AGPLv3 scares away institutional contributors | L×L | Clear dual-license FAQ; templates/SDK MIT; CLA-free DCO contribution flow |
 
-## 3. Open Questions
+## 4. Open Questions
 
 | # | Question | Owner | Needed by |
 | --- | --- | --- | --- |
@@ -35,7 +61,7 @@ Post-GA backlog: OIDC SSO · clinic-API verifications · inbound Petfinder inqui
 | Q4 | Default LLM provider contract (zero-retention terms) for managed cloud | Ops | M1 |
 | Q5 | Do municipal animal controls require records retention beyond our 24-mo application default? | Research | M4 |
 
-## 4. Decision Log (append-only)
+## 5. Decision Log (append-only)
 
 | Date | Decision | Rationale | Alternatives rejected |
 | --- | --- | --- | --- |

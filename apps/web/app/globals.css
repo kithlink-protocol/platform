@@ -691,6 +691,20 @@ input[type='file'].input {
   margin-top: 32px;
 }
 
+@media (min-width: 900px) {
+  .grid-bento > .bento-span-2 {
+    grid-column: span 2;
+  }
+}
+
+details.card > summary {
+  cursor: pointer;
+}
+
+details.card[open] > summary {
+  margin-bottom: 8px;
+}
+
 :focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
