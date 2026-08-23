@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Inject, Param, Post, Put, UseGuards } from '@nestjs/common';
-import { createSyncTargetSchema, siteConfigSchema } from '@kithlink/contracts';
+import { siteConfigSchema } from '@kithlink/contracts';
 import type { TenantContext } from '@kithlink/db';
 import { Principal } from '../../common/principal';
 import { RequireStaffRole, StaffRoleGuard } from '../../common/roles';
