@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import type { ReactNode } from 'react';
+
+import { SiteNav } from '@/components/site-nav';
 
 import './globals.css';
 
@@ -17,14 +18,18 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body>
-        <nav className="site-nav" aria-label="Primary">
-          <Link href="/">Home</Link>
-          <span aria-hidden="true">·</span>
-          <Link href="/shelters">Shelters</Link>
-          <span aria-hidden="true">·</span>
-          <Link href="/dashboard">Dashboard</Link>
-        </nav>
-        <div className="container">{children}</div>
+        <a className="skip-link" href="#main-content">
+          Skip to content
+        </a>
+        <SiteNav />
+        {children}
+        <footer className="site-footer">
+          <div className="container">
+            <p className="t-caption">
+              Kithlink — one profile, verified once, shared with every shelter.
+            </p>
+          </div>
+        </footer>
       </body>
     </html>
   );

@@ -34,34 +34,41 @@ export default function ApplicationsPage() {
   }, []);
 
   return (
-    <main>
-      <h1>My applications</h1>
+    <main id="main-content" className="container prose">
+      <h1 className="t-title">My applications</h1>
       {loading ? (
         <p className="muted">Loading…</p>
       ) : error ? (
-        <p role="alert" className="error">
+        <p role="alert" className="alert alert-danger">
           {error}
         </p>
       ) : applications.length === 0 ? (
-        <p className="muted">
-          You have not applied to any animals yet. <Link href="/shelters">Browse shelters</Link>
-        </p>
+        <div className="empty-state">
+          You have not applied to any animals yet.{' '}
+          <Link href="/shelters">Browse shelters</Link>
+        </div>
       ) : (
-        <ul className="grid" style={{ listStyle: 'none' }}>
+        <ul className="grid-cards section-gap">
           {applications.map(application => (
             <li key={application.id}>
               <article className="card">
-                <h2>{application.animalName}</h2>
-                <p className="muted">{application.shelterName}</p>
-                <span className="badge" data-status={application.status} data-testid="status-badge">
-                  {application.status}
-                </span>
+                <h2 className="card-title">{application.animalName}</h2>
+                <p className="t-meta">{application.shelterName}</p>
+                <p>
+                  <span
+                    className="badge"
+                    data-status={application.status}
+                    data-testid="status-badge"
+                  >
+                    {application.status}
+                  </span>
+                </p>
               </article>
             </li>
           ))}
         </ul>
       )}
-      <p>
+      <p className="section-gap">
         <Link href="/dashboard">← Back to dashboard</Link>
       </p>
     </main>

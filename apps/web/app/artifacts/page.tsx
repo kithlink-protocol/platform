@@ -92,28 +92,34 @@ export default function ArtifactsPage() {
   }
 
   return (
-    <main>
-      <h1>My artifacts</h1>
+    <main id="main-content" className="container prose">
+      <h1 className="t-title">My artifacts</h1>
 
-      <section aria-labelledby="artifact-list-heading">
-        <h2 id="artifact-list-heading">Documents</h2>
+      <section aria-labelledby="artifact-list-heading" className="section-gap">
+        <h2 id="artifact-list-heading" className="t-heading">
+          Documents
+        </h2>
         {listError ? (
-          <p role="alert" className="error">
+          <p role="alert" className="alert alert-danger">
             {listError}
           </p>
         ) : artifacts.length === 0 ? (
-          <p className="muted">No documents uploaded yet.</p>
+          <div className="empty-state">No documents uploaded yet.</div>
         ) : (
-          <ul className="grid" style={{ listStyle: 'none' }}>
+          <ul className="grid-cards section-gap">
             {artifacts.map(artifact => (
               <li key={artifact.id}>
                 <article className="card" data-testid="artifact-card">
-                  <span className="badge">{artifact.type}</span>{' '}
-                  <span className="badge" data-status={artifact.state}>
-                    {artifact.state}
-                  </span>
+                  <p>
+                    <span className="badge">{artifact.type}</span>{' '}
+                    <span className="badge" data-status={artifact.state}>
+                      {artifact.state}
+                    </span>
+                  </p>
                   {typeof artifact.confidence === 'number' ? (
-                    <p className="muted">Confidence {Math.round(artifact.confidence * 100)}%</p>
+                    <p className="t-meta">
+                      Confidence {Math.round(artifact.confidence * 100)}%
+                    </p>
                   ) : null}
                 </article>
               </li>
@@ -122,14 +128,17 @@ export default function ArtifactsPage() {
         )}
       </section>
 
-      <section aria-labelledby="artifact-upload-heading">
-        <h2 id="artifact-upload-heading">Upload a document</h2>
+      <section aria-labelledby="artifact-upload-heading" className="section-gap">
+        <h2 id="artifact-upload-heading" className="t-heading">
+          Upload a document
+        </h2>
         <form onSubmit={onUpload}>
           <div className="form-row">
             <label htmlFor="artifact-type">Document type</label>
             <select
               id="artifact-type"
               name="type"
+              className="input"
               value={type}
               onChange={event => setType(event.target.value as ArtifactType)}
             >
@@ -147,27 +156,28 @@ export default function ArtifactsPage() {
               name="file"
               ref={fileRef}
               type="file"
+              className="input"
               accept=".pdf,image/png,image/jpeg,image/webp"
               required
             />
           </div>
           {uploadError ? (
-            <p role="alert" className="error">
+            <p role="alert" className="alert alert-danger">
               {uploadError}
             </p>
           ) : null}
           {status ? (
-            <p role="status" className="success">
+            <p role="status" className="alert alert-ok">
               {status}
             </p>
           ) : null}
-          <button className="btn" type="submit" disabled={busy}>
+          <button className="btn btn-primary" type="submit" disabled={busy}>
             {busy ? 'Uploading…' : 'Upload'}
           </button>
         </form>
       </section>
 
-      <p>
+      <p className="section-gap">
         <Link href="/dashboard">← Back to dashboard</Link>
       </p>
     </main>

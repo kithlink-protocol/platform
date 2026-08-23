@@ -1,5 +1,7 @@
 # Kithlink Documentation
 
+![Kithlink home, dark mode](assets/web-home-dark.png)
+
 Kithlink is a pet-adoption platform with reusable applicant profiles,
 consent-gated document sharing, shelter dashboards, self-serve shelter
 websites, and listing syndication.

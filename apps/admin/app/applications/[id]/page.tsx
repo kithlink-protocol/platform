@@ -104,7 +104,7 @@ export default function ApplicationDetailPage() {
   if (error && !detail) {
     return (
       <main>
-        <p role="alert" className="error">
+        <p role="alert" className="alert alert-danger">
           {error}
         </p>
       </main>
@@ -121,9 +121,9 @@ export default function ApplicationDetailPage() {
 
   return (
     <main>
-      <header className="card">
-        <h1>Application · {detail.application.animalName}</h1>
-        <p className="muted">
+      <header className="page-header">
+        <h1 className="t-title">Application · {detail.application.animalName}</h1>
+        <p className="t-meta">
           Status{' '}
           <span className="badge" data-status={detail.application.status}>
             {detail.application.status}
@@ -136,104 +136,156 @@ export default function ApplicationDetailPage() {
       </header>
 
       {error ? (
-        <p role="alert" className="error">
+        <p role="alert" className="alert alert-danger">
           {error}
         </p>
       ) : null}
 
-      <section aria-labelledby="applicant-heading" className="card">
-        <h2 id="applicant-heading">Applicant</h2>
-        <p>Legal name: {detail.applicant.legalName}</p>
-        {detail.applicant.displayName ? <p>Display name: {detail.applicant.displayName}</p> : null}
-        {detail.applicant.phone ? <p>Phone: {detail.applicant.phone}</p> : null}
-        <p>
-          Consent: {detail.consent.id ? `${detail.consent.scope} (${detail.consent.status})` : 'none'}
-        </p>
-      </section>
+      <div className="detail-grid">
+        <div className="detail-main">
+          <section aria-labelledby="applicant-heading" className="card">
+            <h2 id="applicant-heading" className="t-heading">
+              Applicant
+            </h2>
+            <p>Legal name: {detail.applicant.legalName}</p>
+            {detail.applicant.displayName ? (
+              <p>Display name: {detail.applicant.displayName}</p>
+            ) : null}
+            {detail.applicant.phone ? <p>Phone: {detail.applicant.phone}</p> : null}
+          </section>
 
-      <section aria-labelledby="answers-heading" className="card">
-        <h2 id="answers-heading">Questionnaire</h2>
-        <pre data-testid="answers-json">{JSON.stringify(detail.application.answers, null, 2)}</pre>
-      </section>
+          <section aria-labelledby="answers-heading" className="card section-gap">
+            <h2 id="answers-heading" className="t-heading">
+              Questionnaire
+            </h2>
+            <pre data-testid="answers-json" className="answers-pre">
+              {JSON.stringify(detail.application.answers, null, 2)}
+            </pre>
+          </section>
 
-      <section aria-labelledby="artifacts-heading">
-        <h2 id="artifacts-heading">Artifacts</h2>
-        {detail.artifacts.length === 0 ? (
-          <p className="muted">No artifacts uploaded.</p>
-        ) : (
-          detail.artifacts.map((artifact) => (
-            <article key={artifact.id} className="card" data-testid="artifact-card">
-              <h3>
-                {artifact.type}{' '}
-                <span className="badge" data-testid="artifact-state" data-status={artifact.state}>
-                  {artifact.state}
-                </span>{' '}
-                {artifact.networkVerified ? (
-                  <span className="badge" data-testid="network-badge">
-                    network verified
-                  </span>
-                ) : null}
-              </h3>
-              {artifact.extracted ? (
-                <pre>{JSON.stringify(artifact.extracted, null, 2)}</pre>
-              ) : null}
-              <div className="grid">
-                <button
-                  type="button"
-                  className="button"
-                  disabled={pending !== null}
-                  onClick={() =>
-                    recordVerification(artifact, 'landlord_call', 'confirmed', true)
-                  }
+          <section aria-labelledby="artifacts-heading" className="section-gap">
+            <h2 id="artifacts-heading" className="t-heading">
+              Artifacts
+            </h2>
+            {detail.artifacts.length === 0 ? (
+              <div className="empty-state">No artifacts uploaded.</div>
+            ) : (
+              detail.artifacts.map((artifact) => (
+                <article
+                  key={artifact.id}
+                  className="card section-gap"
+                  data-testid="artifact-card"
                 >
-                  Confirm landlord call
-                </button>
-                <button
-                  type="button"
-                  className="button button-secondary"
-                  disabled={pending !== null}
-                  onClick={() =>
-                    recordVerification(artifact, 'landlord_call', 'discrepancy', true)
-                  }
-                >
-                  Mark discrepancy
-                </button>
-                {artifact.networkVerified && !hasOwnConfirmedVerification(artifact) ? (
-                  <button
-                    type="button"
-                    className="button button-secondary"
-                    disabled={pending !== null}
-                    onClick={() =>
-                      recordVerification(artifact, 'prior_verification', 'confirmed', false)
-                    }
-                  >
-                    Accept prior verification
-                  </button>
-                ) : null}
-              </div>
-              {artifact.verifications.length > 0 ? (
-                <details>
-                  <summary>
-                    Verifications ({artifact.verifications.length})
-                  </summary>
-                  <ul data-testid="verification-timeline">
-                    {artifact.verifications.map((v, index) => (
-                      <li key={index}>
-                        {v.shelterName} · {v.method} ·{' '}
-                        <span className="badge" data-status={v.outcome}>
-                          {v.outcome}
-                        </span>{' '}
-                        · {formatDate(v.verifiedAt)}
-                        {v.validUntil ? ` · valid until ${formatDate(v.validUntil)}` : ''}
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              ) : null}
-            </article>
-          ))
-        )}
-      </section>
+                  <h3 className="t-subheading">
+                    {artifact.type}{' '}
+                    <span
+                      className="badge"
+                      data-testid="artifact-state"
+                      data-status={artifact.state}
+                    >
+                      {artifact.state}
+                    </span>{' '}
+                    {artifact.networkVerified ? (
+                      <span
+                        className="badge"
+                        data-testid="network-badge"
+                        data-status="active"
+                      >
+                        network verified
+                      </span>
+                    ) : null}
+                  </h3>
+                  {artifact.extracted ? (
+                    <pre className="answers-pre">
+                      {JSON.stringify(artifact.extracted, null, 2)}
+                    </pre>
+                  ) : null}
+                  <div className="btn-row">
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      disabled={pending !== null}
+                      onClick={() =>
+                        recordVerification(artifact, 'landlord_call', 'confirmed', true)
+                      }
+                    >
+                      Confirm landlord call
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-danger"
+                      disabled={pending !== null}
+                      onClick={() =>
+                        recordVerification(artifact, 'landlord_call', 'discrepancy', true)
+                      }
+                    >
+                      Mark discrepancy
+                    </button>
+                    {artifact.networkVerified &&
+                    !hasOwnConfirmedVerification(artifact) ? (
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        disabled={pending !== null}
+                        onClick={() =>
+                          recordVerification(
+                            artifact,
+                            'prior_verification',
+                            'confirmed',
+                            false,
+                          )
+                        }
+                      >
+                        Accept prior verification
+                      </button>
+                    ) : null}
+                  </div>
+                  {artifact.verifications.length > 0 ? (
+                    <details>
+                      <summary className="t-label">
+                        Verifications ({artifact.verifications.length})
+                      </summary>
+                      <ul
+                        className="timeline"
+                        data-testid="verification-timeline"
+                      >
+                        {artifact.verifications.map((v, index) => (
+                          <li key={index}>
+                            <span className="t-meta">
+                              {v.shelterName} · {v.method} ·{' '}
+                              <span className="badge" data-status={v.outcome}>
+                                {v.outcome}
+                              </span>{' '}
+                              · {formatDate(v.verifiedAt)}
+                              {v.validUntil
+                                ? ` · valid until ${formatDate(v.validUntil)}`
+                                : ''}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  ) : null}
+                </article>
+              ))
+            )}
+          </section>
+        </div>
+
+        <aside className="card detail-aside">
+          <h2 className="t-heading">Summary</h2>
+          <dl>
+            <dt className="t-subheading">Consent</dt>
+            <dd className="t-meta">
+              {detail.consent.id
+                ? `${detail.consent.scope} (${detail.consent.status})`
+                : 'none'}
+            </dd>
+            <dt className="t-subheading">Shelter</dt>
+            <dd className="t-meta">{shelterName || '—'}</dd>
+          </dl>
+        </aside>
+      </div>
     </main>
   );
 }

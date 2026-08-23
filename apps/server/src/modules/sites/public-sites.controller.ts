@@ -7,7 +7,7 @@ import { escapeHtml } from './render';
 
 const ANON_CTX = { roleClass: 'anonymous' } as const;
 const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const ALLOWED_FILES = new Set(['index.html', 'animals.html', 'sitemap.txt']);
+const ALLOWED_FILES = new Set(['index.html', 'animals.html', 'sitemap.txt', 'llms.txt']);
 
 @Controller('public/v1/sites')
 export class PublicSitesController {

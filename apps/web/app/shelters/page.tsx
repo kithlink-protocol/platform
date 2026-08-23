@@ -18,32 +18,51 @@ export default async function SheltersPage() {
         ? error.message
         : 'Something went wrong while loading shelters. Please try again later.';
     return (
-      <main>
-        <h1>Shelters</h1>
-        <p role="alert" className="error">
+      <main id="main-content" className="container prose">
+        <h1 className="t-title">Shelters</h1>
+        <p role="alert" className="alert alert-danger">
           {message}
         </p>
-        <Link href="/">Back to home</Link>
+        <p>
+          <Link href="/">← Home</Link>
+        </p>
       </main>
     );
   }
 
   return (
-    <main>
-      <p>
-        <Link href="/">← Home</Link>
-      </p>
-      <h1>Shelters</h1>
+    <main id="main-content" className="container">
+      <div className="shelter-header">
+        <p>
+          <Link href="/" className="t-caption">
+            ← Home
+          </Link>
+        </p>
+        <h1 className="t-title">Shelters</h1>
+      </div>
+      <div className="toolbar">
+        <input
+          className="input"
+          type="search"
+          placeholder="Search shelters"
+          aria-label="Search shelters"
+          disabled
+        />
+        <select className="input" aria-label="Filter by species" disabled>
+          <option value="">All species</option>
+        </select>
+      </div>
       {shelters.length === 0 ? (
-        <p className="muted">No shelters are listed yet.</p>
+        <div className="empty-state">No shelters are listed yet.</div>
       ) : (
-        <ul className="grid" style={{ listStyle: 'none' }}>
+        <ul className="grid-cards">
           {shelters.map((shelter) => (
             <li key={shelter.id}>
-              <article className="card">
-                <h2>
+              <article className="card card-link">
+                <h2 className="card-title">
                   <Link href={`/shelters/${shelter.slug}`}>{shelter.name}</Link>
                 </h2>
+                <p className="t-meta">{shelter.slug}</p>
               </article>
             </li>
           ))}

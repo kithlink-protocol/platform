@@ -147,3 +147,11 @@ quarterly restore drill are in
   in [docs/design/03-api.md §5](../design/03-api.md)
 
 Related: [Troubleshooting](../guide/troubleshooting.md).
+
+## Verified install
+
+The end-to-end suite that exercises this stack runs in CI on every push:
+build → lint → unit/integration tests against Postgres/MinIO → Playwright journeys.
+A green run is the deployment readiness signal.
+
+![Generated site sample](../assets/site-happytail.png)

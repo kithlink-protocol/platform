@@ -78,8 +78,8 @@ export default function ProfilePage() {
   }
 
   return (
-    <main>
-      <h1>Your profile</h1>
+    <main id="main-content" className="container prose">
+      <h1 className="t-title">Your profile</h1>
       {loading ? (
         <p className="muted">Loading…</p>
       ) : (
@@ -91,6 +91,7 @@ export default function ProfilePage() {
                 id="legalName"
                 name="legalName"
                 type="text"
+                className="input"
                 autoComplete="name"
                 required
                 minLength={2}
@@ -104,6 +105,7 @@ export default function ProfilePage() {
                 id="displayName"
                 name="displayName"
                 type="text"
+                className="input"
                 value={displayName}
                 onChange={event => setDisplayName(event.target.value)}
               />
@@ -114,6 +116,7 @@ export default function ProfilePage() {
                 id="phone"
                 name="phone"
                 type="tel"
+                className="input"
                 placeholder="+15551230000"
                 value={phone}
                 onChange={event => setPhone(event.target.value)}
@@ -125,25 +128,26 @@ export default function ProfilePage() {
                 id="address"
                 name="address"
                 rows={3}
+                className="input"
                 value={address}
                 onChange={event => setAddress(event.target.value)}
               />
             </div>
             {error ? (
-              <p role="alert" className="error">
+              <p role="alert" className="alert alert-danger">
                 {error}
               </p>
             ) : null}
             {saved ? (
-              <p role="status" className="success" data-testid="success-msg">
+              <p role="status" className="alert alert-ok" data-testid="success-msg">
                 Profile saved
               </p>
             ) : null}
-            <button className="btn" type="submit" disabled={saving}>
+            <button className="btn btn-primary" type="submit" disabled={saving}>
               {saving ? 'Saving…' : 'Save profile'}
             </button>
           </form>
-          <p>
+          <p className="section-gap">
             <Link href="/dashboard">← Back to dashboard</Link>
           </p>
         </>

@@ -122,7 +122,7 @@ export default function SitePage() {
   if (loadError) {
     return (
       <main>
-        <p role="alert" className="error">
+        <p role="alert" className="alert alert-danger">
           {loadError}
         </p>
       </main>
@@ -141,11 +141,13 @@ export default function SitePage() {
 
   return (
     <main>
-      <header className="card">
-        <h1>Shelter site</h1>
-        <p className="muted">
+      <header className="page-header">
+        <h1 className="t-title">Shelter site</h1>
+        <p className="t-meta">
           Public site for /{slug}
-          {shownPublishedAt ? ` · last published ${new Date(shownPublishedAt).toISOString()}` : ''}
+          {shownPublishedAt
+            ? ` · last published ${new Date(shownPublishedAt).toISOString()}`
+            : ''}
         </p>
         <p>
           <Link href="/dashboard">Back to dashboard</Link>
@@ -153,78 +155,91 @@ export default function SitePage() {
       </header>
 
       <section className="card" aria-labelledby="site-form-heading">
-        <h2 id="site-form-heading">Site content</h2>
+        <h2 id="site-form-heading" className="t-heading">
+          Site content
+        </h2>
         <form onSubmit={onSave}>
-          <p>
+          <div className="form-row">
             <label htmlFor="heroTitle">Hero title</label>
             <input
               id="heroTitle"
               name="heroTitle"
               type="text"
               maxLength={140}
+              className="input"
               value={heroTitle}
               onChange={(e) => setHeroTitle(e.target.value)}
             />
-          </p>
-          <p>
+          </div>
+          <div className="form-row">
             <label htmlFor="heroBody">Hero body</label>
             <textarea
               id="heroBody"
               name="heroBody"
               maxLength={500}
               rows={4}
+              className="input"
               value={heroBody}
               onChange={(e) => setHeroBody(e.target.value)}
             />
-          </p>
-          <p>
+          </div>
+          <div className="form-row">
             <label htmlFor="themeSlug">Theme</label>
             <select
               id="themeSlug"
               name="themeSlug"
+              className="input"
               value={themeSlug}
               onChange={(e) => setThemeSlug(e.target.value)}
             >
               <option value="default">default</option>
               <option value="rescue-min">rescue-min</option>
             </select>
-          </p>
-          <p>
+          </div>
+          <div className="form-row">
             <label htmlFor="logoUrl">Logo URL</label>
             <input
               id="logoUrl"
               name="logoUrl"
               type="url"
               placeholder="https://…"
+              className="input"
               value={logoUrl}
               onChange={(e) => setLogoUrl(e.target.value)}
             />
-          </p>
-          <p>
+          </div>
+          <div className="form-row">
             <label htmlFor="primaryColor">Primary color</label>
             <input
               id="primaryColor"
               name="primaryColor"
               type="color"
               pattern="#[0-9a-f]{6}"
+              className="input"
               value={primaryColor}
               onChange={(e) => setPrimaryColor(e.target.value)}
             />
-          </p>
-          <button className="button" type="submit" disabled={saveState === 'saving'}>
+          </div>
+          <button className="btn btn-primary" type="submit" disabled={saveState === 'saving'}>
             Save
           </button>
-          {saveState === 'saved' ? <span data-testid="site-saved">Saved.</span> : null}
+          {saveState === 'saved' ? (
+            <span className="alert alert-ok" data-testid="site-saved">
+              Saved.
+            </span>
+          ) : null}
         </form>
       </section>
 
-      <section className="card" aria-labelledby="publish-heading">
-        <h2 id="publish-heading">Publish</h2>
-        <button className="button" type="button" onClick={onPublish} disabled={publishing}>
+      <section className="card section-gap" aria-labelledby="publish-heading">
+        <h2 id="publish-heading" className="t-heading">
+          Publish
+        </h2>
+        <button className="btn btn-primary" type="button" onClick={onPublish} disabled={publishing}>
           {publishing ? 'Publishing…' : 'Publish'}
         </button>
         {publishError ? (
-          <p role="alert" className="error">
+          <p role="alert" className="alert alert-danger">
             {publishError}
           </p>
         ) : null}
@@ -240,7 +255,7 @@ export default function SitePage() {
             </a>
           </p>
         ) : (
-          <p className="muted">Not published yet.</p>
+          <p className="t-meta">Not published yet.</p>
         )}
       </section>
     </main>

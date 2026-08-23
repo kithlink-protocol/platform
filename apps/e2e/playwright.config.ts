@@ -20,19 +20,19 @@ export default defineConfig({
         ADMIN_URL: 'http://127.0.0.1:3001',
       },
       timeout: 60000,
-      reuseExistingServer: true,
+      reuseExistingServer: process.env.E2E_REUSE === "1",
     },
     {
       command: 'pnpm --filter @kithlink/web dev -p 3000',
       url: 'http://127.0.0.1:3000',
       timeout: 120000,
-      reuseExistingServer: true,
+      reuseExistingServer: process.env.E2E_REUSE === "1",
     },
     {
       command: 'pnpm --filter @kithlink/admin dev',
       url: 'http://127.0.0.1:3001',
       timeout: 120000,
-      reuseExistingServer: true,
+      reuseExistingServer: process.env.E2E_REUSE === "1",
     },
   ],
 });

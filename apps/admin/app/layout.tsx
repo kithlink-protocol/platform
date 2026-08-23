@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 
+import { AdminNav } from './nav';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -15,7 +16,13 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body>
-        <div className="container">{children}</div>
+        <a className="skip-link" href="#main">
+          Skip to content
+        </a>
+        <AdminNav />
+        <div className="container" id="main">
+          {children}
+        </div>
       </body>
     </html>
   );

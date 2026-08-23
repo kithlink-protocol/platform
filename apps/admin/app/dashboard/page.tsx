@@ -1,11 +1,24 @@
 'use client';
 
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 import { ApiError, apiFetch } from '@/lib/api';
-import type { AnimalPublic, AuthSession, Membership } from '@kithlink/contracts';
+import type {
+  AnimalPublic,
+  ApplicationPublic,
+  AuthSession,
+  Membership,
+  SiteConfigResponse,
+} from '@kithlink/contracts';
+
+const OPEN_STATUSES = new Set(['draft', 'submitted', 'in_review', 'info_requested']);
+
+function formatDay(value: string | null): string {
+  if (!value) return '—';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '—' : date.toISOString().slice(0, 10);
+}
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -14,6 +27,8 @@ export default function DashboardPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [animals, setAnimals] = useState<AnimalPublic[] | null>(null);
   const [animalsError, setAnimalsError] = useState<string | null>(null);
+  const [applications, setApplications] = useState<ApplicationPublic[] | null>(null);
+  const [sitePublishedAt, setSitePublishedAt] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -47,6 +62,8 @@ export default function DashboardPage() {
     let cancelled = false;
     setAnimals(null);
     setAnimalsError(null);
+    setApplications(null);
+    setSitePublishedAt(null);
     apiFetch<{ items: AnimalPublic[] }>(
       `/admin/v1/shelters/${encodeURIComponent(selectedId)}/animals?limit=25`,
     )
@@ -59,6 +76,20 @@ export default function DashboardPage() {
           err instanceof Error ? err.message : 'Could not load animals.',
         );
       });
+    apiFetch<{ items: ApplicationPublic[] }>(
+      `/admin/v1/shelters/${encodeURIComponent(selectedId)}/applications?limit=50`,
+    )
+      .then((data) => {
+        if (!cancelled) setApplications(data.items);
+      })
+      .catch(() => undefined);
+    apiFetch<SiteConfigResponse>(
+      `/admin/v1/shelters/${encodeURIComponent(selectedId)}/site`,
+    )
+      .then((data) => {
+        if (!cancelled) setSitePublishedAt(data.publishedAt);
+      })
+      .catch(() => undefined);
     return () => {
       cancelled = true;
     };
@@ -67,7 +98,7 @@ export default function DashboardPage() {
   if (sessionError) {
     return (
       <main>
-        <p role="alert" className="error">
+        <p role="alert" className="alert alert-danger">
           {sessionError}
         </p>
       </main>
@@ -87,35 +118,53 @@ export default function DashboardPage() {
       (membership: Membership) => membership.shelterId === selectedId,
     ) ?? null;
 
+  const availableCount =
+    animals?.filter((animal) => animal.status === 'available').length ?? 0;
+  const openApplicationsCount =
+    applications?.filter((application) => OPEN_STATUSES.has(application.status))
+      .length ?? 0;
+
   return (
     <main>
-      <header className="card">
-        <h1>Dashboard</h1>
-        <p className="muted">Signed in as {session.user.email}</p>
-        <p>
-          <Link href="/applications">Applications</Link>{' '}
-          <Link href="/site">Site</Link>{' '}
-          <Link href="/sync">Sync</Link>
-        </p>
+      <header className="page-header">
+        <h1 className="t-title">Dashboard</h1>
+        <p className="t-meta">Signed in as {session.user.email}</p>
       </header>
 
+      <div className="stat-row">
+        <div className="card stat">
+          <span className="stat-value">{availableCount}</span>
+          <span className="stat-label">Animals available</span>
+        </div>
+        <div className="card stat">
+          <span className="stat-value">{openApplicationsCount}</span>
+          <span className="stat-label">Open applications</span>
+        </div>
+        <div className="card stat">
+          <span className="stat-value">{formatDay(sitePublishedAt)}</span>
+          <span className="stat-label">Site published</span>
+        </div>
+      </div>
+
       <section aria-labelledby="shelters-heading">
-        <h2 id="shelters-heading">Your shelters</h2>
+        <h2 id="shelters-heading" className="t-heading">
+          Your shelters
+        </h2>
         {session.memberships.length === 0 ? (
-          <p className="muted">
+          <p className="muted t-lede">
             You are not a member of any shelter yet. Ask a shelter admin to add
             you.
           </p>
         ) : (
-          <div className="grid" role="group" aria-label="Select a shelter">
+          <div className="btn-row" role="group" aria-label="Select a shelter">
             {session.memberships.map((membership) => (
               <button
                 key={membership.shelterId}
                 type="button"
                 className={
                   membership.shelterId === selectedId
-                    ? 'button'
-                    : 'button button-secondary'
+                    ? 'btn btn-primary'
+                    : 'btn btn-secondary'
                 }
                 aria-pressed={membership.shelterId === selectedId}
                 onClick={() => setSelectedId(membership.shelterId)}
@@ -128,12 +177,12 @@ export default function DashboardPage() {
       </section>
 
       {selectedShelter ? (
-        <section aria-labelledby="animals-heading">
-          <h2 id="animals-heading">
+        <section aria-labelledby="animals-heading" className="section-gap">
+          <h2 id="animals-heading" className="t-heading">
             Animals at {selectedShelter.shelterName}
           </h2>
           {animalsError ? (
-            <p role="alert" className="error">
+            <p role="alert" className="alert alert-danger">
               {animalsError}
             </p>
           ) : animals === null ? (
@@ -141,7 +190,7 @@ export default function DashboardPage() {
           ) : animals.length === 0 ? (
             <p className="muted">No animals recorded yet.</p>
           ) : (
-            <table>
+            <table className="table">
               <thead>
                 <tr>
                   <th scope="col">Name</th>

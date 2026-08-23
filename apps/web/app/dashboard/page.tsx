@@ -20,7 +20,7 @@ export default function DashboardPage() {
 
   if (sessionState.status === 'loading') {
     return (
-      <main>
+      <main id="main-content" className="container prose">
         <p className="muted">Loading…</p>
       </main>
     );
@@ -28,34 +28,42 @@ export default function DashboardPage() {
 
   if (sessionState.status === 'error') {
     return (
-      <main>
-        <h1>Dashboard</h1>
-        <p role="alert" className="error">
+      <main id="main-content" className="container prose">
+        <h1 className="t-title">Dashboard</h1>
+        <p role="alert" className="alert alert-danger">
           {sessionState.message}
         </p>
-        <Link href="/">Back to home</Link>
+        <p>
+          <Link href="/">Back to home</Link>
+        </p>
       </main>
     );
   }
 
   return (
-    <main>
-      <h1>Dashboard</h1>
-      <p>
+    <main id="main-content" className="container prose">
+      <h1 className="t-title">Dashboard</h1>
+      <p className="t-lede">
         Signed in as <strong>{sessionState.session.user.email}</strong>
       </p>
-      <ul style={{ listStyle: 'none', padding: 0 }}>
+      <ul className="menu">
         <li>
-          <Link href="/applications">My applications</Link>
+          <Link className="card card-link" href="/applications">
+            My applications
+          </Link>
         </li>
         <li>
-          <Link href="/artifacts">My artifacts</Link>
+          <Link className="card card-link" href="/artifacts">
+            My artifacts
+          </Link>
         </li>
         <li>
-          <Link href="/profile">Profile</Link>
+          <Link className="card card-link" href="/profile">
+            Profile
+          </Link>
         </li>
       </ul>
-      <button className="btn" type="button" onClick={onLogout} disabled={loggingOut}>
+      <button className="btn btn-secondary" type="button" onClick={onLogout} disabled={loggingOut}>
         {loggingOut ? 'Logging out…' : 'Log out'}
       </button>
     </main>

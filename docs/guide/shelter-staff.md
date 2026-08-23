@@ -126,3 +126,14 @@ Practical implications for your daily work:
 
 See also: [Applicant Guide](applicants.md) for the adopter-side view,
 [Shelter Admin Guide](shelter-admin.md) for roles and publishing.
+
+## Screenshots
+
+![Admin login](../assets/admin-login.png)
+*Staff sign-in.*
+
+![Dashboard](../assets/admin-dashboard.png)
+*Dashboard — inventory, open applications, site status at a glance.*
+
+![Application review](../assets/admin-applications.png)
+*Review queue.*

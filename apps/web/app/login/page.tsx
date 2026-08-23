@@ -34,8 +34,8 @@ export default function LoginPage() {
   }
 
   return (
-    <main>
-      <h1>Log in</h1>
+    <main id="main-content" className="container prose">
+      <h1 className="t-title">Log in</h1>
       <form onSubmit={onSubmit}>
         <div className="form-row">
           <label htmlFor="email">Email</label>
@@ -43,6 +43,7 @@ export default function LoginPage() {
             id="email"
             name="email"
             type="email"
+            className="input"
             autoComplete="email"
             required
             value={email}
@@ -55,6 +56,7 @@ export default function LoginPage() {
             id="password"
             name="password"
             type="password"
+            className="input"
             autoComplete="current-password"
             required
             value={password}
@@ -62,15 +64,15 @@ export default function LoginPage() {
           />
         </div>
         {error ? (
-          <p role="alert" className="error">
+          <p role="alert" className="alert alert-danger">
             {error}
           </p>
         ) : null}
-        <button className="btn" type="submit" disabled={submitting}>
+        <button className="btn btn-primary" type="submit" disabled={submitting}>
           {submitting ? 'Logging in…' : 'Log in'}
         </button>
       </form>
-      <p>
+      <p className="section-gap">
         New here? <Link href="/register">Create an account</Link>
       </p>
     </main>

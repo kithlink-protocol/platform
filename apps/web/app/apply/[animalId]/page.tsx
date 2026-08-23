@@ -42,11 +42,11 @@ export default function ApplyPage() {
   }
 
   return (
-    <main>
-      <h1>Apply for this pet</h1>
+    <main id="main-content" className="container prose">
+      <h1 className="t-title">Apply for this pet</h1>
       {submitted ? (
         <>
-          <p className="success" role="status" data-testid="success-msg">
+          <p className="alert alert-ok" role="status" data-testid="success-msg">
             Application submitted.
           </p>
           <p>
@@ -55,7 +55,7 @@ export default function ApplyPage() {
         </>
       ) : (
         <>
-          <p className="muted">Your reusable profile is attached automatically.</p>
+          <p className="t-lede">Your reusable profile is attached automatically.</p>
           <form onSubmit={onSubmit}>
             <div className="form-row">
               <label htmlFor="why_this_pet">Why this pet?</label>
@@ -63,16 +63,17 @@ export default function ApplyPage() {
                 id="why_this_pet"
                 name="why_this_pet"
                 rows={5}
+                className="input"
                 value={whyThisPet}
                 onChange={event => setWhyThisPet(event.target.value)}
               />
             </div>
             {error ? (
-              <p role="alert" className="error">
+              <p role="alert" className="alert alert-danger">
                 {error}
               </p>
             ) : null}
-            <button className="btn" type="submit" disabled={submitting}>
+            <button className="btn btn-primary" type="submit" disabled={submitting}>
               {submitting ? 'Submitting…' : 'Submit application'}
             </button>
           </form>

@@ -161,3 +161,20 @@ Contact the operator of your Kithlink instance; operators can remove users and
 revoking consents cuts off shelter access immediately in the meantime.
 
 See also: [Troubleshooting](troubleshooting.md).
+
+## Screenshots
+
+![Kithlink home](../assets/web-home.png)
+*Home — one profile, every shelter.*
+
+![Shelter detail with available animals](../assets/web-shelter-detail.png)
+*Shelter page — available animals and apply links.*
+
+![Your applications](../assets/web-applications.png)
+*Applications list with live status badges.*
+
+![Artifacts](../assets/web-artifacts.png)
+*Upload lease, vet records and ID once — reuse everywhere.*
+
+![Dark mode](../assets/web-home-dark.png)
+*Dark mode follows your device preference.*

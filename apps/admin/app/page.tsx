@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 
-import { ApiError, apiFetch } from '@/lib/api';
+import { apiFetch } from '@/lib/api';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -31,12 +31,13 @@ export default function LoginPage() {
   }
 
   return (
-    <main>
-      <section className="card">
-        <h1>Shelter staff sign-in</h1>
+    <main className="auth-main">
+      <section className="card auth-card">
+        <p className="wordmark">Kithlink</p>
+        <h1 className="t-title">Shelter staff sign-in</h1>
         <form onSubmit={onSubmit}>
           <fieldset disabled={pending}>
-            <p>
+            <div className="form-row">
               <label htmlFor="email">Email</label>
               <input
                 id="email"
@@ -44,11 +45,12 @@ export default function LoginPage() {
                 type="email"
                 autoComplete="email"
                 required
+                className="input"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
-            </p>
-            <p>
+            </div>
+            <div className="form-row">
               <label htmlFor="password">Password</label>
               <input
                 id="password"
@@ -56,16 +58,17 @@ export default function LoginPage() {
                 type="password"
                 autoComplete="current-password"
                 required
+                className="input"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
-            </p>
+            </div>
             {error ? (
-              <p role="alert" className="error">
+              <p role="alert" className="alert alert-danger">
                 {error}
               </p>
             ) : null}
-            <button className="button" type="submit">
+            <button className="btn btn-primary" type="submit">
               {pending ? 'Signing in…' : 'Sign in'}
             </button>
           </fieldset>

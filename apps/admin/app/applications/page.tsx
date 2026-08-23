@@ -56,7 +56,7 @@ export default function ApplicationsPage() {
   if (error) {
     return (
       <main>
-        <p role="alert" className="error">
+        <p role="alert" className="alert alert-danger">
           {error}
         </p>
       </main>
@@ -65,9 +65,9 @@ export default function ApplicationsPage() {
 
   return (
     <main>
-      <header className="card">
-        <h1>Applications</h1>
-        <p className="muted">
+      <header className="page-header">
+        <h1 className="t-title">Applications</h1>
+        <p className="t-lede">
           {session
             ? `Reviewing applications for ${session.memberships[0]?.shelterName ?? 'your shelter'}`
             : 'Loading…'}
@@ -76,16 +76,24 @@ export default function ApplicationsPage() {
 
       {applications === null ? (
         <section aria-labelledby="applications-heading">
-          <h2 id="applications-heading">Loading applications…</h2>
+          <h2 id="applications-heading" className="t-heading">
+            Loading applications…
+          </h2>
         </section>
       ) : applications.length === 0 ? (
         <section aria-labelledby="applications-heading">
-          <h2 id="applications-heading">No applications yet.</h2>
+          <div className="empty-state">
+            <h2 id="applications-heading" className="t-heading">
+              No applications yet.
+            </h2>
+          </div>
         </section>
       ) : (
         <section aria-labelledby="applications-heading">
-          <h2 id="applications-heading">Submitted applications</h2>
-          <table>
+          <h2 id="applications-heading" className="t-heading">
+            Submitted applications
+          </h2>
+          <table className="table">
             <thead>
               <tr>
                 <th scope="col">Animal</th>
@@ -106,7 +114,11 @@ export default function ApplicationsPage() {
                       {application.status}
                     </span>
                   </td>
-                  <td>{application.submittedAt ? new Date(application.submittedAt).toLocaleString() : '—'}</td>
+                  <td className="mono t-meta">
+                    {application.submittedAt
+                      ? new Date(application.submittedAt).toLocaleString()
+                      : '—'}
+                  </td>
                 </tr>
               ))}
             </tbody>

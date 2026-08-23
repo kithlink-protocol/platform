@@ -36,16 +36,33 @@ export async function generateMetadata({ params }: ShelterPageProps): Promise<Me
   return { title: result.ok ? result.shelter.name : 'Shelter' };
 }
 
+function animalMetaLine(animal: AnimalPublic): string {
+  return [
+    animal.species,
+    animal.breed ?? null,
+    animal.sex !== 'unknown' ? animal.sex : null,
+    animal.size ?? null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+}
+
+function animalPhotoUrl(animal: AnimalPublic): string | null {
+  return animal.photos.map(photo => photo.url).find(url => url !== null) ?? null;
+}
+
 export default async function ShelterDetailPage({ params }: ShelterPageProps) {
   const result = await loadShelter(params.slug);
 
   if (!result.ok) {
     return (
-      <main>
-        <p role="alert" className="error">
+      <main id="main-content" className="container prose">
+        <p role="alert" className="alert alert-danger">
           {result.message}
         </p>
-        <Link href="/shelters">Back to shelters</Link>
+        <p>
+          <Link href="/shelters">Back to shelters</Link>
+        </p>
       </main>
     );
   }
@@ -53,38 +70,58 @@ export default async function ShelterDetailPage({ params }: ShelterPageProps) {
   const { shelter, animals } = result;
 
   return (
-    <main>
-      <p>
-        <Link href="/shelters">← All shelters</Link>
-      </p>
-      <header className="card">
-        <h1>{shelter.name}</h1>
-        <p className="muted">
+    <main id="main-content" className="container">
+      <header className="shelter-header">
+        <p>
+          <Link href="/shelters" className="t-caption">
+            ← All shelters
+          </Link>
+        </p>
+        <h1 className="t-title">{shelter.name}</h1>
+        <p className="t-meta">
           {shelter.availableAnimalCount}{' '}
           {shelter.availableAnimalCount === 1 ? 'animal' : 'animals'} available
         </p>
       </header>
 
       <section aria-labelledby="animals-heading">
-        <h2 id="animals-heading">Animals</h2>
+        <h2 id="animals-heading" className="t-heading">
+          Animals
+        </h2>
         {animals.length === 0 ? (
-          <p className="muted">No animals available.</p>
+          <div className="empty-state">No animals available.</div>
         ) : (
-          <ul className="grid" style={{ listStyle: 'none' }}>
+          <ul className="grid-cards section-gap">
             {animals.map((animal) => (
               <li key={animal.id}>
                 <article className="card" data-testid="animal-card">
-                  <h3>{animal.name}</h3>
-                  <p className="muted">
-                    {animal.species}
-                    {animal.breed ? ` · ${animal.breed}` : ''}
+                  {animalPhotoUrl(animal) ? (
+                    <div className="animal-photo">
+                      <img
+                        src={animalPhotoUrl(animal) as string}
+                        alt={`${animal.name} photo`}
+                        loading="lazy"
+                      />
+                    </div>
+                  ) : (
+                    <div className="animal-photo" aria-hidden="true">
+                      <span>{animal.species.charAt(0).toUpperCase()}</span>
+                    </div>
+                  )}
+                  <h3 className="card-title">{animal.name}</h3>
+                  <p className="t-meta">{animalMetaLine(animal)}</p>
+                  <p>
+                    <span className="badge" data-status={animal.status}>
+                      {animal.status}
+                    </span>
                   </p>
-                  <span className="badge" data-status={animal.status}>
-                    {animal.status}
-                  </span>
                   {animal.status === 'available' ? (
-                    <p style={{ marginBottom: 0 }}>
-                      <Link className="button" data-testid="apply-link" href={`/apply/${animal.id}`}>
+                    <p>
+                      <Link
+                        className="btn btn-primary btn-sm"
+                        data-testid="apply-link"
+                        href={`/apply/${animal.id}`}
+                      >
                         Apply
                       </Link>
                     </p>

@@ -132,3 +132,14 @@ passwords there.
 
 See also: [Shelter Staff Guide](shelter-staff.md),
 [Self-hosting reference](../self-hosting.md).
+
+## Screenshots
+
+![Site editor](../assets/admin-site-editor.png)
+*Site editor — hero, theme and brand tokens, then Publish.*
+
+![Sync targets](../assets/admin-sync.png)
+*Syndication target management with dry-run mode.*
+
+![Generated shelter site](../assets/site-happytail.png)
+*The published public site, generated from your inventory.*

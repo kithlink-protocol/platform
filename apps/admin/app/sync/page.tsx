@@ -99,7 +99,7 @@ export default function SyncPage() {
   if (loadError) {
     return (
       <main>
-        <p role="alert" className="error">
+        <p role="alert" className="alert alert-danger">
           {loadError}
         </p>
       </main>
@@ -118,39 +118,42 @@ export default function SyncPage() {
 
   return (
     <main>
-      <header className="card">
-        <h1>Listing sync</h1>
-        <p className="muted">Push adoptable animals to external listing providers.</p>
+      <header className="page-header">
+        <h1 className="t-title">Listing sync</h1>
+        <p className="t-lede">Push adoptable animals to external listing providers.</p>
         <p>
           <Link href="/dashboard">Back to dashboard</Link>
         </p>
       </header>
 
       <section className="card" aria-labelledby="sync-target-heading">
-        <h2 id="sync-target-heading">Provider target</h2>
+        <h2 id="sync-target-heading" className="t-heading">
+          Provider target
+        </h2>
         {currentTarget ? (
-          <p className="muted">
+          <p className="t-meta">
             Configured: mode {currentTarget.mode}, status {currentTarget.status}
             {currentTarget.lastRunAt
               ? ` · last run ${new Date(currentTarget.lastRunAt).toISOString()}`
               : ''}
           </p>
         ) : (
-          <p className="muted">Not configured for this provider yet.</p>
+          <p className="t-meta">Not configured for this provider yet.</p>
         )}
         <form onSubmit={onSave}>
-          <p>
+          <div className="form-row">
             <label htmlFor="provider">Provider</label>
             <select
               id="provider"
               name="provider"
+              className="input"
               value={provider}
               onChange={(e) => setProvider(e.target.value)}
             >
               <option value="petfinder">petfinder</option>
             </select>
-          </p>
-          <p>
+          </div>
+          <div className="form-row">
             <label htmlFor="clientId">Client ID</label>
             <input
               id="clientId"
@@ -159,11 +162,12 @@ export default function SyncPage() {
               minLength={8}
               maxLength={200}
               required
+              className="input"
               value={clientId}
               onChange={(e) => setClientId(e.target.value)}
             />
-          </p>
-          <p>
+          </div>
+          <div className="form-row">
             <label htmlFor="clientSecret">Client secret</label>
             <input
               id="clientSecret"
@@ -173,31 +177,44 @@ export default function SyncPage() {
               maxLength={200}
               required
               autoComplete="off"
+              className="input"
               value={clientSecret}
               onChange={(e) => setClientSecret(e.target.value)}
             />
-          </p>
-          <p>
+          </div>
+          <div className="form-row">
             <label htmlFor="mode">Mode</label>
-            <select id="mode" name="mode" value={mode} onChange={(e) => setMode(e.target.value)}>
+            <select
+              id="mode"
+              name="mode"
+              className="input"
+              value={mode}
+              onChange={(e) => setMode(e.target.value)}
+            >
               <option value="dry_run">dry_run</option>
               <option value="live">live</option>
             </select>
-          </p>
-          <button className="button" type="submit" disabled={saveState === 'saving'}>
+          </div>
+          <button className="btn btn-primary" type="submit" disabled={saveState === 'saving'}>
             Save target
           </button>
-          {saveState === 'saved' ? <span data-testid="sync-saved">Saved.</span> : null}
+          {saveState === 'saved' ? (
+            <span className="alert alert-ok" data-testid="sync-saved">
+              Saved.
+            </span>
+          ) : null}
         </form>
       </section>
 
-      <section className="card" aria-labelledby="sync-run-heading">
-        <h2 id="sync-run-heading">Run sync</h2>
-        <button className="button" type="button" onClick={onRun} disabled={running}>
+      <section className="card section-gap" aria-labelledby="sync-run-heading">
+        <h2 id="sync-run-heading" className="t-heading">
+          Run sync
+        </h2>
+        <button className="btn btn-primary" type="button" onClick={onRun} disabled={running}>
           {running ? 'Running…' : 'Run sync'}
         </button>
         {actionError ? (
-          <p role="alert" className="error">
+          <p role="alert" className="alert alert-danger">
             {actionError}
           </p>
         ) : null}
