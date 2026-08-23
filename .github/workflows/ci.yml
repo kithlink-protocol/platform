@@ -145,6 +145,8 @@ jobs:
           [ "$ok" = 1 ]
       - name: Install Playwright browsers
         run: pnpm --filter @kithlink/e2e exec playwright install --with-deps chromium
+      - name: Build workspace libraries
+        run: pnpm --filter @kithlink/contracts --filter @kithlink/db --filter @kithlink/sync-adapters run build
       - name: Run e2e
         run: pnpm --filter @kithlink/e2e test
       - name: Upload Playwright report
