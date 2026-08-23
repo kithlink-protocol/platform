@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { getAnimal, resolveAssetUrl } from '@/lib/api';
+import { FavoriteToggle } from '@/components/favorite-toggle';
 import type { AnimalDetail } from '@kithlink/contracts';
 
 interface AnimalDetailPageProps {
@@ -108,6 +109,7 @@ export default async function AnimalDetailPage({ params }: AnimalDetailPageProps
             </div>
           )}
           <h1 className="t-title">{animal.name}</h1>
+          <FavoriteToggle animalId={animal.id} name={animal.name} />
           <p>
             <span className="badge" data-status={animal.status}>
               {animal.status}

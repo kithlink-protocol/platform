@@ -121,6 +121,11 @@ export const animalSearchQuerySchema = cursorPageSchema.extend({
   nearLat: z.coerce.number().min(-90).max(90).optional(),
   nearLng: z.coerce.number().min(-180).max(180).optional(),
   radiusKm: z.coerce.number().min(1).max(500).optional(),
+  // Trait facets: coerced from query strings; map to traits_json filters server-side.
+  goodWithKids: z.coerce.boolean().optional(),
+  goodWithDogs: z.coerce.boolean().optional(),
+  goodWithCats: z.coerce.boolean().optional(),
+  energy: z.enum(['low', 'medium', 'high']).optional(),
 });
 export type AnimalSearchQuery = z.infer<typeof animalSearchQuerySchema>;
 
@@ -131,6 +136,19 @@ export const animalSearchItemSchema = animalPublicSchema.extend({
 });
 export type AnimalSearchItem = z.infer<typeof animalSearchItemSchema>;
 export const animalSearchResponseSchema = paginated(animalSearchItemSchema);
+
+export const favoriteSchema = z.object({
+  id: uuidSchema,
+  animalId: uuidSchema,
+  animalName: z.string(),
+  shelterSlug: slugSchema,
+  shelterName: z.string(),
+  animalStatus: animalStatusSchema,
+  addedAt: z.string().datetime(),
+});
+export type Favorite = z.infer<typeof favoriteSchema>;
+export const favoritesResponseSchema = paginated(favoriteSchema);
+export type FavoritesResponse = z.infer<typeof favoritesResponseSchema>;
 
 export const OBSERVATION_TAGS = [
   'playful',

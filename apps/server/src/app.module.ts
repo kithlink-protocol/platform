@@ -15,6 +15,7 @@ import { ApplicationsModule } from './modules/applications/applications.module';
 import { JourneysModule } from './modules/journeys/journeys.module';
 import { FostersModule } from './modules/fosters/fosters.module';
 import { ConsentsModule } from './modules/consents/consents.module';
+import { FavoritesModule } from './modules/favorites/favorites.module';
 import { ParseModule } from './modules/parse/parse.module';
 import { VerificationsModule } from './modules/verifications/verifications.module';
 import { SitesModule } from './modules/sites/sites.module';
@@ -38,6 +39,7 @@ import { SyncModule } from './modules/sync/sync.module';
     JourneysModule,
     FostersModule,
     ConsentsModule,
+    FavoritesModule,
     ParseModule,
     VerificationsModule,
     SitesModule,

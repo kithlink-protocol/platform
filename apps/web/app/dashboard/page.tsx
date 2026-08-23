@@ -13,6 +13,45 @@ export default function DashboardPage() {
   const [loggingOut, setLoggingOut] = useState(false);
   const [resending, setResending] = useState(false);
   const [resent, setResent] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmText, setConfirmText] = useState('');
+  const [deletePassword, setDeletePassword] = useState('');
+  const [dangerError, setDangerError] = useState<string | null>(null);
+
+  async function onExport() {
+    setExporting(true);
+    try {
+      const res = await fetch('/api/app/v1/me/export', { credentials: 'include' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `kithlink-export-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setDangerError('Export failed. Please try again later.');
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function onDeleteAccount() {
+    setDeleting(true);
+    setDangerError(null);
+    try {
+      await apiFetch('/app/v1/me/delete', {
+        method: 'POST',
+        body: JSON.stringify({ password: deletePassword }),
+      });
+      router.push('/');
+    } catch (error) {
+      setDangerError(error instanceof Error ? error.message : 'Something went wrong.');
+      setDeleting(false);
+    }
+  }
 
   async function onLogout() {
     setLoggingOut(true);
@@ -90,6 +129,52 @@ export default function DashboardPage() {
           </Link>
         </li>
       </ul>
+      <section className="card" data-testid="danger-zone">
+        <h2 className="card-title">Danger zone</h2>
+        <p className="muted">
+          Download everything Kithlink stores about you, or permanently delete your account.
+        </p>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={onExport}
+          disabled={exporting}
+        >
+          {exporting ? 'Preparing…' : 'Export my data'}
+        </button>
+        <div>
+          <input
+            data-testid="delete-confirm"
+            aria-label="Type DELETE to confirm account deletion"
+            value={confirmText}
+            onChange={e => setConfirmText(e.target.value)}
+            placeholder="Type DELETE"
+          />
+          <input
+            data-testid="delete-password"
+            type="password"
+            aria-label="Confirm your password"
+            autoComplete="current-password"
+            value={deletePassword}
+            onChange={e => setDeletePassword(e.target.value)}
+            placeholder="Password"
+          />
+          <button
+            type="button"
+            className="btn btn-danger"
+            data-testid="delete-account"
+            onClick={onDeleteAccount}
+            disabled={deleting || confirmText !== 'DELETE' || deletePassword.length === 0}
+          >
+            {deleting ? 'Deleting…' : 'Delete account'}
+          </button>
+        </div>
+        {dangerError ? (
+          <p role="alert" className="alert alert-danger">
+            {dangerError}
+          </p>
+        ) : null}
+      </section>
       <button className="btn btn-secondary" type="button" onClick={onLogout} disabled={loggingOut}>
         {loggingOut ? 'Logging out…' : 'Log out'}
       </button>

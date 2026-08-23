@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 
 import { searchAnimals } from '@/lib/api';
+import { FavoriteToggle } from '@/components/favorite-toggle';
 import type { AnimalAgeClass, AnimalSearchItem } from '@kithlink/contracts';
 
 interface AnimalsPageProps {
@@ -20,6 +21,10 @@ const FILTER_KEYS = [
   'nearLat',
   'nearLng',
   'radiusKm',
+  'goodWithKids',
+  'goodWithDogs',
+  'goodWithCats',
+  'energy',
 ] as const;
 
 type FilterKey = (typeof FILTER_KEYS)[number];
@@ -136,6 +141,47 @@ export default async function AnimalsPage({ searchParams }: AnimalsPageProps) {
           </select>
         </div>
         <fieldset className="form-row">
+          <legend>Good with</legend>
+          <div className="near-grid">
+            <label>
+              <input
+                type="checkbox"
+                name="goodWithKids"
+                value="true"
+                defaultChecked={query.goodWithKids === 'true'}
+              />{' '}
+              Kids
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                name="goodWithDogs"
+                value="true"
+                defaultChecked={query.goodWithDogs === 'true'}
+              />{' '}
+              Dogs
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                name="goodWithCats"
+                value="true"
+                defaultChecked={query.goodWithCats === 'true'}
+              />{' '}
+              Cats
+            </label>
+          </div>
+        </fieldset>
+        <div className="form-row">
+          <label htmlFor="f-energy">Energy</label>
+          <select id="f-energy" className="input" name="energy" defaultValue={query.energy ?? ''}>
+            <option value="">Any energy</option>
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+          </select>
+        </div>
+        <fieldset className="form-row">
           <legend>Near</legend>
           <div className="near-grid">
             <label htmlFor="f-lat">
@@ -206,6 +252,7 @@ export default async function AnimalsPage({ searchParams }: AnimalsPageProps) {
                   <h2 className="card-title">
                     <Link href={`/animals/${animal.id}`}>{animal.name}</Link>
                   </h2>
+                  <FavoriteToggle animalId={animal.id} name={animal.name} />
                   <p>{animal.ageClass ? <span className="badge">{ageClassLabel(animal.ageClass)}</span> : null}</p>
                   <p className="t-meta">{metaLine(animal)}</p>
                   <p className="t-meta">

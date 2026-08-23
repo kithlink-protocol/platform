@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 
 import { ApiError, getShelter, listShelterAnimals, resolveAssetUrl } from '@/lib/api';
+import { FavoriteToggle } from '@/components/favorite-toggle';
 import type { AnimalPublic, ShelterDetail } from '@kithlink/contracts';
 
 interface ShelterPageProps {
@@ -116,6 +117,7 @@ export default async function ShelterDetailPage({ params }: ShelterPageProps) {
                       </div>
                     )}
                     <h3 className="card-title">{animal.name}</h3>
+                    <FavoriteToggle animalId={animal.id} name={animal.name} />
                     <p className="t-meta">{animalMetaLine(animal)}</p>
                     <p>
                       <span className="badge" data-status={animal.status}>

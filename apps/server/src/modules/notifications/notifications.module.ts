@@ -3,11 +3,17 @@ import nodemailer from 'nodemailer';
 import type { Transporter } from 'nodemailer';
 import type { AnySql } from '@kithlink/db';
 import { TenantService } from '../db.module';
+import { S3Service } from '../s3/s3.module';
 
 export interface OutboxEmailPayload {
   to: string[];
   subject: string;
   text: string;
+}
+
+/** m17 account deletion: S3 objects to crypto-shred from storage (docs/design/04 §6). */
+export interface AccountArtifactPurgePayload {
+  keys: string[];
 }
 
 /** Mail templates: plain-text bodies carrying the action URLs (docs/design/11 §4 item 5). */
@@ -40,13 +46,20 @@ export class OutboxService {
   ) {}
 
   /** Enqueue inside the caller's transaction so the event commits atomically with the write. */
-  async enqueue(sql: AnySql, topic: string, payload: OutboxEmailPayload): Promise<void> {
+  async enqueue(
+    sql: AnySql,
+    topic: string,
+    payload: OutboxEmailPayload | AccountArtifactPurgePayload,
+  ): Promise<void> {
     await sql`
       insert into outbox_events (topic, payload_json)
       values (${topic}, ${JSON.stringify(payload)}::jsonb)`;
   }
 
-  async enqueueViaService(topic: string, payload: OutboxEmailPayload): Promise<void> {
+  async enqueueViaService(
+    topic: string,
+    payload: OutboxEmailPayload | AccountArtifactPurgePayload,
+  ): Promise<void> {
     await this.tenants.service(sql => this.enqueue(sql, topic, payload));
   }
 }
@@ -58,21 +71,20 @@ export class MailDispatcher implements OnApplicationShutdown {
 
   constructor(
     @Inject(TenantService) private readonly tenants: TenantService,
+    @Inject(S3Service) private readonly s3: S3Service,
   ) {
     this.transport = process.env.SMTP_URL ? nodemailer.createTransport(process.env.SMTP_URL) : null;
   }
 
   start(intervalMs = 10_000): void {
     if (!this.transport) {
-      console.warn('[outbox] SMTP_URL not set; dispatcher idle — events will queue unsent');
-      return;
+      console.warn('[outbox] SMTP_URL not set; email events will queue unsent');
     }
     this.timer = setInterval(() => void this.drain(), intervalMs);
     this.timer.unref?.();
   }
 
   async drain(): Promise<number> {
-    if (!this.transport) return 0;
     const rows = (await this.tenants.service(async sql => {
       return sql`
         select id, topic, payload_json
@@ -80,16 +92,27 @@ export class MailDispatcher implements OnApplicationShutdown {
         where sent_at is null
         order by created_at
         limit 20`;
-    })) as unknown as { id: string; topic: string; payload_json: OutboxEmailPayload }[];
+    })) as unknown as {
+      id: string;
+      topic: string;
+      payload_json: OutboxEmailPayload | AccountArtifactPurgePayload;
+    }[];
     let sent = 0;
     for (const row of rows) {
       try {
-        await this.transport.sendMail({
-          from: process.env.MAIL_FROM ?? 'Kithlink <no-reply@localhost>',
-          to: row.payload_json.to,
-          subject: row.payload_json.subject,
-          text: row.payload_json.text,
-        });
+        if (row.topic === 'account.artifact_purge') {
+          const purge = row.payload_json as AccountArtifactPurgePayload;
+          for (const key of purge.keys ?? []) await this.s3.delete(key);
+        } else {
+          if (!this.transport) continue;
+          const email = row.payload_json as OutboxEmailPayload;
+          await this.transport.sendMail({
+            from: process.env.MAIL_FROM ?? 'Kithlink <no-reply@localhost>',
+            to: email.to,
+            subject: email.subject,
+            text: email.text,
+          });
+        }
         await this.tenants.service(
           async sql => sql`update outbox_events set sent_at = now() where id = ${row.id}::uuid`,
         );

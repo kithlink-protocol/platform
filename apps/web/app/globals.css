@@ -945,3 +945,17 @@ details.card[open] > summary {
   height: 220px;
   width: 100%;
 }
+
+.fav-toggle {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 1.25rem;
+  line-height: 1;
+  padding: 0.15rem 0.3rem;
+  color: var(--accent, #b4552d);
+}
+
+.fav-toggle[aria-pressed='true'] {
+  color: #d43f3f;
+}
