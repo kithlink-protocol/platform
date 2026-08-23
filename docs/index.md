@@ -27,6 +27,27 @@ websites, and listing syndication.
   website (`/site`), subdomain serving, custom domains (Beta), Petfinder
   syndication (`/sync`), and the RSS fallback feed.
 
+### Role SOPs & onboarding
+
+Role-based standard operating procedures answering pain-point P7
+([12 — Pain-Point Report](design/12-pain-points-milestones.md)): role
+ambiguity and SOP absence. Each SOP grounds its steps in real screens and
+endpoints.
+
+- [SOP index](sop/index.md) — hub table with time-to-productive targets and
+  how to adapt the library per shelter.
+- [Intake Volunteer SOP](sop/intake-volunteer.md) — animal intake fields,
+  photo hygiene, status lifecycle, same-day behavior observations,
+  sterilization status hygiene.
+- [Adoption Coordinator SOP](sop/adoption-coordinator.md) — oldest-first
+  triage, review checklist, verification decision tree, notes discipline,
+  placement-velocity self-metric.
+- [Foster Coordinator SOP](sop/foster-coordinator.md) — honest home
+  onboarding, matching & placements, weekly check-in review, escalation path,
+  closing placements.
+- [30/60/90 Onboarding Checklists](sop/onboarding-checklists.md) — printable
+  ramp plans per role.
+
 ### For operators
 
 - [Deployment Guide](deploy/overview.md) — compare deployment options and walk
@@ -69,7 +90,7 @@ websites, and listing syndication.
 | Audience | Start here |
 | --- | --- |
 | Applicant (adopter) | [Applicant Guide](guide/applicants.md) |
-| Shelter staff | [Shelter Staff Guide](guide/shelter-staff.md) |
+| Shelter staff | [Shelter Staff Guide](guide/shelter-staff.md), then the [role SOP](sop/index.md) for your job |
 | Shelter admin | [Shelter Admin Guide](guide/shelter-admin.md) |
 | Self-hoster | [Deployment Guide](deploy/overview.md) then [Self-hosting](self-hosting.md) |
 | Contributor | [README quickstart](../README.md) + [TECH_DESIGN.md](../TECH_DESIGN.md) |
