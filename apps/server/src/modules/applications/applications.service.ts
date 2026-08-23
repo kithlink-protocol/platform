@@ -25,6 +25,7 @@ import { isUniqueViolation } from '../../common/db.util';
 import { AuditService } from '../../common/audit.service';
 import { TenantService } from '../db.module';
 import { OutboxService } from '../notifications/notifications.module';
+import { JourneysService } from '../journeys/journeys.service';
 import {
   mapArtifact,
   selectArtifactsForApplicant,
@@ -80,6 +81,7 @@ export class ApplicationsService {
     @Inject(TenantService) private readonly tenants: TenantService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(OutboxService) private readonly outbox: OutboxService,
+    @Inject(JourneysService) private readonly journeys: JourneysService,
   ) {}
 
   private async loadNames(animalIds: string[], shelterIds: string[]): Promise<{
@@ -285,6 +287,15 @@ export class ApplicationsService {
         return updated;
       },
     )) as ApplicationRow;
+
+    // After-commit side effect: adoption finalization starts the M5 journey.
+    if (input.status === 'adopted') {
+      try {
+        await this.journeys.createForAdoption(applicationId);
+      } catch (error) {
+        console.error(`[journeys] journey creation failed for application ${applicationId}`, error);
+      }
+    }
 
     if (TERMINAL_STATUSES.has(input.status)) {
       await this.tenants.service(async sql => {

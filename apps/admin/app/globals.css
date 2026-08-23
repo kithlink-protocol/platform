@@ -352,6 +352,19 @@ a {
   color: var(--danger);
 }
 
+.badge-danger {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.case-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
 .form-row {
   display: flex;
   flex-direction: column;

@@ -749,3 +749,199 @@ details.card[open] > summary {
     transform: none;
   }
 }
+
+.journey-trail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  margin: 16px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.trail-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.trail-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--border);
+}
+
+.trail-dot.done {
+  background: var(--primary);
+}
+
+.trail-dot.current {
+  background: var(--primary-soft);
+  box-shadow: 0 0 0 0 var(--primary);
+  animation: trail-pulse 1.8s ease-out infinite;
+}
+
+@keyframes trail-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgb(194 65 12 / 0.55);
+  }
+
+  70% {
+    box-shadow: 0 0 0 10px rgb(194 65 12 / 0);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgb(194 65 12 / 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trail-dot.current,
+  .confetti-piece,
+  .skeleton {
+    animation: none;
+  }
+}
+
+.trail-label {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.journey-edu {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.chip:hover {
+  border-color: var(--primary);
+}
+
+.chip-selected,
+.chip-selected:hover {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  color: var(--primary-strong);
+}
+
+.mood-row {
+  display: flex;
+  gap: 8px;
+}
+
+.mood-btn {
+  font-size: 22px;
+  line-height: 1;
+  padding: 8px 10px;
+  border-radius: 12px;
+}
+
+.mood-btn.selected {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.topic-group {
+  border: none;
+  margin: 0;
+  padding: 0;
+}
+
+.form-check {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.journey-skip {
+  margin-top: 24px;
+}
+
+.journey-warm,
+.journey-done {
+  text-align: center;
+  padding-block: 40px;
+  display: grid;
+  place-items: center;
+  gap: 12px;
+}
+
+.confetti {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.confetti-piece {
+  position: absolute;
+  top: -16px;
+  width: 8px;
+  height: 14px;
+  border-radius: 2px;
+  opacity: 0;
+  animation: confetti-fall 2.4s ease-in forwards;
+}
+
+@keyframes confetti-fall {
+  0% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 1;
+  }
+
+  100% {
+    transform: translateY(90vh) rotate(540deg);
+    opacity: 0;
+  }
+}
+
+.skeleton {
+  border-radius: 8px;
+  background: linear-gradient(90deg, var(--border) 25%, var(--surface) 50%, var(--border) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease infinite;
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.skeleton-title {
+  height: 32px;
+  width: 240px;
+}
+
+.skeleton-line {
+  height: 16px;
+  width: 320px;
+}
+
+.skeleton-card {
+  height: 220px;
+  width: 100%;
+}

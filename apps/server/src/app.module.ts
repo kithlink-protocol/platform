@@ -12,6 +12,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { ProfileModule } from './modules/profile/profile.module';
 import { ArtifactsModule } from './modules/artifacts/artifacts.module';
 import { ApplicationsModule } from './modules/applications/applications.module';
+import { JourneysModule } from './modules/journeys/journeys.module';
 import { ConsentsModule } from './modules/consents/consents.module';
 import { ParseModule } from './modules/parse/parse.module';
 import { VerificationsModule } from './modules/verifications/verifications.module';
@@ -33,6 +34,7 @@ import { SyncModule } from './modules/sync/sync.module';
     ProfileModule,
     ArtifactsModule,
     ApplicationsModule,
+    JourneysModule,
     ConsentsModule,
     ParseModule,
     VerificationsModule,

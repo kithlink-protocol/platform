@@ -51,3 +51,16 @@ k6 in CI · Geist font swap. See the [remaining backlog](design/09-roadmap.md).
 Planned next (from gap analysis §1–3): photo upload pipeline UI, saved pets/favorites,
 care-and-behavior facets, email-match alerts, reporting module, self-serve account
 export/delete.
+
+## M5 "Settling In" — post-adoption journeys (2026-08-23)
+
+| Capability | Status | Where |
+| --- | --- | --- |
+| Adoption → journey auto-creation (day 2/14/30/365 touchpoints) | Shipped | `adoption_journeys` + applications transition hook |
+| Gentle check-in emails (skip-friendly, no login) | Shipped | outbox topic `journey.checkin` + scheduler sweep |
+| Token-secured check-in page (moods, topics, note) | Shipped | web `/journey?jt=` |
+| Concern routing to staff case queue + risk flag | Shipped | `adoption_cases` + admin `/journeys` |
+| Return intake linked to original adoption (no data erasure) | Shipped | `POST .../journeys/:id/return` |
+| Gotcha-Day anniversary touchpoint | Shipped | day 365 |
+
+Planned: photo moments, milestone badge persistence, SMS channel, foster-journey reuse (M8).

@@ -162,3 +162,4 @@ For incident handling and security reports see
 [SECURITY.md](../../SECURITY.md) and the runbooks in
 [docs/runbooks/](../runbooks/) (incident severity, data-breach playbook,
 restore drill).
+- **Journey link expired / already used** — each check-in link works once; the next one arrives on schedule. Staff can view history in the admin Journeys queue.

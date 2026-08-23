@@ -188,3 +188,16 @@ see results within reach — each card shows how far away the animal is. Open an
 for photos, story, traits and the shelter's details, then hit **Apply**.
 
 ![Animal discovery](../assets/web-animals.png)
+
+## After you adopt: the Settling In journey
+
+Adoption day is day zero of a story we'd love to hear about. We'll send you **three
+tiny check-ins** (day 2, 2 weeks, 1 month) plus a Gotcha Day card on your anniversary.
+Each one is a single cheerful page — two emoji taps, optional words, done in a minute.
+No login, no pressure, and skipping is always okay.
+
+If anything feels hard, tick *"I'd like the shelter team to reach out"* — a real human
+will contact you quietly. Wins are celebrated loudly: badges, confetti, and a growing
+paw-print trail.
+
+![Settling In check-in](../assets/web-journey.png)

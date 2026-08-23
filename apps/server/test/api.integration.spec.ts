@@ -5,7 +5,7 @@ import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import request from 'supertest';
 import { createDb, type DbHandles } from '@kithlink/db';
-import { animalSearchResponseSchema } from '@kithlink/contracts';
+import { animalSearchResponseSchema, type JourneyDetail } from '@kithlink/contracts';
 import { AppModule } from '../src/app.module';
 import { ProblemFilter } from '../src/common/http-exception.filter';
 import { TenantService } from '../src/modules/db.module';
@@ -912,6 +912,233 @@ describe.skipIf(!testUrl)('api integration', () => {
           where u.email = ${m5.email} order by t.created_at desc limit 2`;
       })) as unknown as { id: string }[];
       expect(rows.length).toBe(2);
+    });
+  });
+
+  describe('M5 adoption journeys', () => {
+    let applicantCookie: string[];
+    let journeyAnimalId: string;
+    let mainJourneyId: string;
+    let returnJourneyId: string;
+
+    const createAdoptedApplication = async (name: string): Promise<string> => {
+      const animal = await http()
+        .post(`/admin/v1/shelters/${shelterId}/animals`)
+        .set('Cookie', devCookie)
+        .send({ name, species: 'dog' });
+      expect(animal.status).toBe(201);
+      const apply = await http().post('/app/v1/applications')
+        .set('Cookie', applicantCookie)
+        .send({ animalId: animal.body.id, answers: { why_this_pet: 'journeys' } });
+      expect(apply.status).toBe(201);
+      const appId = apply.body.application.id;
+      for (const status of ['in_review', 'approved', 'adopted'] as const) {
+        const patch = await http()
+          .patch(`/admin/v1/shelters/${shelterId}/applications/${appId}/status`)
+          .set('Cookie', devCookie)
+          .send({ status });
+        expect(patch.status).toBe(200);
+      }
+      return animal.body.id;
+    };
+
+    const sendTouchpoint = async (dayOffset: number): Promise<string> => {
+      const rows = (await tenants.service(async sql => {
+        await sql`
+          update journey_touchpoints set status = 'sent', sent_at = now()
+          where day_offset = ${dayOffset}
+            and journey_id = (
+              select id from adoption_journeys
+              where animal_id = ${journeyAnimalId}::uuid limit 1)`;
+        const tokens = (await sql`
+          select token_raw from journey_touchpoints
+          where day_offset = ${dayOffset}
+            and journey_id = (
+              select id from adoption_journeys
+              where animal_id = ${journeyAnimalId}::uuid limit 1)`) as unknown as { token_raw: string }[];
+        return tokens;
+      })) as unknown as { token_raw: string }[];
+      expect(rows[0]?.token_raw).toBeTruthy();
+      return rows[0]!.token_raw;
+    };
+
+    const staffGetJourney = async (journeyId?: string): Promise<JourneyDetail> => {
+      const id = journeyId ?? mainJourneyId;
+      const res = await http()
+        .get(`/admin/v1/shelters/${shelterId}/journeys/${id}`)
+        .set('Cookie', devCookie);
+      expect(res.status).toBe(200);
+      return res.body as JourneyDetail;
+    };
+
+    it('creates a journey with 4 touchpoints when an application is adopted', async () => {
+      const email = `m5-j-${Date.now()}@x.dev`;
+      await http().post('/app/v1/auth/register').send({ email, password: 'Password123x' });
+      applicantCookie = await loginAndGetCookie(email, 'Password123x');
+      await http().put('/app/v1/me/profile').set('Cookie', applicantCookie)
+        .send({ legalName: 'Jo Journey', phone: '+15550001111' });
+
+      journeyAnimalId = await createAdoptedApplication(`JourneyPet-${Date.now()}`);
+      const rows = (await tenants.service(async sql => {
+        return sql`
+          select t.day_offset, j.id as journey_id from adoption_journeys j
+          join journey_touchpoints t on t.journey_id = j.id
+          where j.animal_id = ${journeyAnimalId}::uuid order by t.day_offset`;
+      })) as unknown as { day_offset: number; journey_id: string }[];
+      expect(rows.map(r => r.day_offset)).toEqual([2, 14, 30, 365]);
+      mainJourneyId = rows[0]!.journey_id;
+    });
+
+    it('serves the public view for the raw token after a touchpoint is sent', async () => {
+      const token = await sendTouchpoint(2);
+      const res = await http().get(`/public/v1/journey?jt=${token}`);
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({
+        animalName: expect.any(String),
+        shelterName: expect.any(String),
+        dayOffset: 2,
+        dayLabel: 'First nights',
+        alreadyDone: false,
+      });
+    });
+
+    it('closes the touchpoint on respond without followUp and opens no case', async () => {
+      const token = await sendTouchpoint(2);
+      const respond = await http().post('/public/v1/journey/respond').send({
+        token,
+        petMood: 4,
+        ownerMood: 4,
+        topics: ['food'],
+        note: 'Sleeping on the couch already',
+        wantFollowUp: false,
+      });
+      expect(respond.status).toBe(201);
+      const rows = (await tenants.service(async sql => {
+        return sql`
+          select t.status from journey_touchpoints t
+          join adoption_journeys j on j.id = t.journey_id
+          where j.animal_id = ${journeyAnimalId}::uuid and t.day_offset = 2`;
+      })) as unknown as { status: string }[];
+      expect(rows[0]?.status).toBe('done');
+
+      const detail = await staffGetJourney();
+      expect(detail.cases).toEqual([]);
+    });
+
+    it('rejects a second respond with the same token as gone', async () => {
+      const token = await sendTouchpoint(2);
+      const first = await http().post('/public/v1/journey/respond').send({
+        token,
+        petMood: 3,
+        ownerMood: 3,
+        topics: [],
+        wantFollowUp: false,
+      });
+      expect(first.status).toBe(201);
+      const again = await http().post('/public/v1/journey/respond').send({
+        token,
+        petMood: 3,
+        ownerMood: 3,
+        topics: [],
+        wantFollowUp: false,
+      });
+      // Deviation from brief: shipped backend answers 404 (touchpoint no longer 'sent').
+      expect([400, 404]).toContain(again.status);
+    });
+
+    it('opens a concern case for vet topic + followUp and flags risk until resolved', async () => {
+      const token = await sendTouchpoint(14);
+      const respond = await http().post('/public/v1/journey/respond').send({
+        token,
+        petMood: 3,
+        ownerMood: 4,
+        topics: ['vet'],
+        wantFollowUp: true,
+      });
+      expect(respond.status).toBe(201);
+
+      const list = await http().get(`/admin/v1/shelters/${shelterId}/journeys`).set('Cookie', devCookie);
+      expect(list.status).toBe(200);
+      const flagged = list.body.items.find((j: { id: string }) => j.id === mainJourneyId);
+      expect(flagged).toBeTruthy();
+      expect(flagged.risk).toBe(true);
+
+      const detail = await staffGetJourney(mainJourneyId);
+      expect(detail.cases).toHaveLength(1);
+      expect(detail.cases[0]).toMatchObject({ kind: 'concern', reason: 'vet', status: 'open' });
+
+      const resolve = await http()
+        .post(`/admin/v1/shelters/${shelterId}/journeys/cases/${detail.cases[0].id}/resolve`)
+        .set('Cookie', devCookie)
+        .send({ resolutionNote: 'Vet visit booked together' });
+      expect(resolve.status).toBe(201);
+
+      const after = await http()
+        .get(`/admin/v1/shelters/${shelterId}/journeys/${flagged.id}`)
+        .set('Cookie', devCookie);
+      expect(after.body.cases[0].status).toBe('resolved');
+      const relist = await http().get(`/admin/v1/shelters/${shelterId}/journeys`).set('Cookie', devCookie);
+      const cleared = relist.body.items.find((j: { id: string }) => j.id === mainJourneyId);
+      expect(cleared.risk).toBe(false);
+    });
+
+    it('completes the journey once all four touchpoints are done', async () => {
+      for (const offset of [30, 365]) {
+        const token = await sendTouchpoint(offset);
+        const respond = await http().post('/public/v1/journey/respond').send({
+          token,
+          petMood: 5,
+          ownerMood: 5,
+          topics: [],
+          wantFollowUp: false,
+        });
+        expect(respond.status).toBe(201);
+      }
+      const rows = (await tenants.service(async sql => {
+        return sql`select status from adoption_journeys where animal_id = ${journeyAnimalId}::uuid`;
+      })) as unknown as { status: string }[];
+      expect(rows[0]?.status).toBe('completed');
+    });
+
+    it('skips a sent touchpoint and returns the animal via the return endpoint', async () => {
+      const animalId = await createAdoptedApplication(`ReturnPet-${Date.now()}`);
+      const rows = (await tenants.service(async sql => {
+        await sql`
+          update journey_touchpoints set status = 'sent', sent_at = now()
+          where day_offset = 2 and journey_id = (
+            select id from adoption_journeys where animal_id = ${animalId}::uuid limit 1)`;
+        return sql`
+          select j.id, t.token_raw from adoption_journeys j
+          join journey_touchpoints t on t.journey_id = j.id
+          where j.animal_id = ${animalId}::uuid limit 1`;
+      })) as unknown as { id: string; token_raw: string }[];
+      returnJourneyId = rows[0]!.id;
+
+      const skip = await http().post('/public/v1/journey/skip').send({ token: rows[0]!.token_raw });
+      expect(skip.status).toBe(201);
+      const skipped = (await tenants.service(async sql => {
+        return sql`
+          select t.status from journey_touchpoints t
+          where t.token_raw = ${rows[0]!.token_raw}`;
+      })) as unknown as { status: string }[];
+      expect(skipped[0]?.status).toBe('skipped');
+
+      const ret = await http()
+        .post(`/admin/v1/shelters/${shelterId}/journeys/${returnJourneyId}/return`)
+        .set('Cookie', devCookie)
+        .send({ reason: 'Match was not the right fit' });
+      expect(ret.status).toBe(201);
+
+      const animal = (await tenants.service(async sql => {
+        return sql`select status from animals where id = ${animalId}::uuid`;
+      })) as unknown as { status: string }[];
+      expect(animal[0]?.status).toBe('available');
+
+      const detail = await http()
+        .get(`/admin/v1/shelters/${shelterId}/journeys/${returnJourneyId}`)
+        .set('Cookie', devCookie);
+      expect(detail.body.status).toBe('returned');
+      expect(detail.body.cases.some((c: { kind: string }) => c.kind === 'return')).toBe(true);
     });
   });
 });

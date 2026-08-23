@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
 import { UnauthorizedException } from '@nestjs/common';
-import { addApplicationNoteSchema, ageToAgeClass, applicantHistorySchema, registerSchema, staffRoles } from '@kithlink/contracts';
+import { addApplicationNoteSchema, ageToAgeClass, applicantHistorySchema, labelForDay, registerSchema, staffRoles } from '@kithlink/contracts';
 import { mapSpecies, mapStatus, PetfinderAdapter } from '@kithlink/sync-adapters';
 import { decodeCursor, encodeCursor } from '../src/common/cursor.util';
 import { haversineKm } from '../src/common/geo';
@@ -294,5 +294,19 @@ describe('haversineKm', () => {
     const pdxToAustin = haversineKm(45.52, -122.68, 30.27, -97.74);
     expect(pdxToAustin).toBeGreaterThan(2700);
     expect(pdxToAustin).toBeLessThan(2950);
+  });
+});
+
+describe('labelForDay', () => {
+  it('maps the four touchpoint offsets to gentle labels', () => {
+    expect(labelForDay(2)).toBe('First nights');
+    expect(labelForDay(14)).toBe('Settling in');
+    expect(labelForDay(30)).toBe('One month home');
+    expect(labelForDay(365)).toBe('Gotcha Day anniversary');
+  });
+
+  it('falls back to Day N for unknown offsets', () => {
+    expect(labelForDay(7)).toBe('Day 7');
+    expect(labelForDay(0)).toBe('Day 0');
   });
 });

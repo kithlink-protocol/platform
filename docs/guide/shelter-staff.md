@@ -150,3 +150,16 @@ expires; other shelters' data only appears while an active grant exists.
 
 Leave internal **Notes** on any application (they are audited and never shown to
 applicants).
+
+## Post-adoption journeys
+
+When a placement is finalized, Kithlink schedules gentle check-ins (days 2/14/30 +
+anniversary) to the adopter automatically. Open **Journeys** in the admin nav:
+
+- **On track** adopters just share wins — enjoy them.
+- **Needs attention** flags appear when an adopter raises a topic or asks for contact;
+  resolve cases with a short note after you've helped.
+- **Return intake** links a return to its original adoption so your outcome data stays
+  honest — no more mystery "owner surrenders."
+
+Nothing is mandatory for adopters; skipped check-ins simply fade out.
