@@ -58,6 +58,9 @@ export default async function AnimalDetailPage({ params }: AnimalDetailPageProps
     ? animal.medical.vaccinations.filter((v): v is string => typeof v === 'string')
     : [];
 
+  const sterilized =
+    Boolean(animal.medical.spayNeuter) || animal.sterilization.status === 'completed';
+
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'Animal',
@@ -96,6 +99,14 @@ export default async function AnimalDetailPage({ params }: AnimalDetailPageProps
               <>
                 {' '}
                 <span className="badge">{animal.ageClass}</span>
+              </>
+            ) : null}
+            {sterilized ? (
+              <>
+                {' '}
+                <span className="badge" data-testid="steril-chip">
+                  Spay/neutered
+                </span>
               </>
             ) : null}
           </p>

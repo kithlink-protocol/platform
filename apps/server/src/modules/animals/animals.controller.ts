@@ -101,3 +101,24 @@ export class AdminAnimalsController {
     return this.animalsService.listObservations(this.ctxOf(principal, shelterId), shelterId, id, 50);
   }
 }
+
+@UseGuards(SessionGuard, StaffRoleGuard)
+@RequireStaffRole('viewer')
+@Controller('admin/v1/shelters/:shelterId/sterilization')
+export class AdminSterilizationController {
+  constructor(
+    @Inject(AnimalsService) private readonly animalsService: AnimalsService,
+  ) {}
+
+  private ctxOf(principal: Principal, shelterId: string): TenantContext {
+    return { userId: principal.user.id, shelterId, roleClass: 'staff' };
+  }
+
+  @Get('summary')
+  summary(
+    @Principal() principal: Principal,
+    @Param('shelterId') shelterId: string,
+  ) {
+    return this.animalsService.sterilizationSummary(this.ctxOf(principal, shelterId), shelterId);
+  }
+}

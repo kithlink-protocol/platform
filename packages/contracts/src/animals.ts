@@ -18,6 +18,14 @@ export const animalStatuses = [
 export const animalStatusSchema = z.enum(animalStatuses);
 export type AnimalStatus = (typeof animalStatuses)[number];
 
+export const sterilizationStatuses = [
+  'unknown',
+  'scheduled',
+  'completed',
+  'voucher_issued',
+] as const;
+export type SterilizationStatus = (typeof sterilizationStatuses)[number];
+
 // Buckets derive from birthYear only: baby <1y, young 1-2, adult 3-7, senior 8+.
 export function ageToAgeClass(birthYear: number | null, now: Date = new Date()): AnimalAgeClass | null {
   if (birthYear === null) return null;
@@ -38,6 +46,13 @@ const traitsSchema = z
   })
   .strip();
 
+export const sterilizationInputSchema = z.object({
+  status: z.enum(sterilizationStatuses).default('unknown'),
+  dueDate: z.string().datetime().nullish(),
+  voucherRef: z.string().max(120).nullish(),
+});
+export type SterilizationInput = z.infer<typeof sterilizationInputSchema>;
+
 export const animalCreateSchema = z.object({
   name: z.string().min(1).max(120),
   species: z.enum(animalSpecies),
@@ -49,6 +64,7 @@ export const animalCreateSchema = z.object({
   status: animalStatusSchema.default('available'),
   medical: z.record(z.unknown()).default({}),
   traits: traitsSchema.default({}),
+  sterilization: sterilizationInputSchema.default({}),
 });
 export type AnimalCreateInput = z.infer<typeof animalCreateSchema>;
 
@@ -78,6 +94,11 @@ export const animalPublicSchema = z.object({
   description: z.string().nullable(),
   medical: z.record(z.unknown()),
   traits: z.record(z.unknown()),
+  sterilization: z.object({
+    status: z.enum(sterilizationStatuses),
+    dueDate: z.string().datetime().nullable(),
+    voucherRef: z.string().nullable(),
+  }),
   photos: z.array(animalPhotoPublicSchema).default([]),
   createdAt: z.string().datetime(),
 });
@@ -154,3 +175,13 @@ export const animalDetailSchema = animalPublicSchema.extend({
   observations: z.array(behaviorObservationSchema).max(20).default([]),
 });
 export type AnimalDetail = z.infer<typeof animalDetailSchema>;
+
+export const complianceSummarySchema = z.object({
+  total: z.number().int().nonnegative(),
+  completed: z.number().int().nonnegative(),
+  scheduled: z.number().int().nonnegative(),
+  voucherIssued: z.number().int().nonnegative(),
+  unknown: z.number().int().nonnegative(),
+  overdue: z.number().int().nonnegative(),
+});
+export type ComplianceSummary = z.infer<typeof complianceSummarySchema>;

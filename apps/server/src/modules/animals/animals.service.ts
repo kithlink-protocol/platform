@@ -11,6 +11,7 @@ import {
   animalSearchItemSchema,
   animalSearchResponseSchema,
   behaviorObservationSchema,
+  complianceSummarySchema,
   type AddObservationInput,
   type AnimalAgeClass,
   type AnimalDetail,
@@ -20,11 +21,14 @@ import {
   type AnimalSearchQuery,
   type AnimalStatus,
   type BehaviorObservation,
+  type ComplianceSummary,
+  type SterilizationStatus,
 } from '@kithlink/contracts';
 import { animalPhotos, animals, type AnySql, type PendingQuery, type Row, type TenantContext } from '@kithlink/db';
 import { decodeCursor, encodeCursor } from '../../common/cursor.util';
 import { AuditService } from '../../common/audit.service';
 import { isCheckViolation, isForeignKeyViolation } from '../../common/db.util';
+import { OutboxService } from '../notifications/notifications.module';
 import { TenantService } from '../db.module';
 
 // No photo-metadata input schema exists in contracts yet; kept server-local until promoted.
@@ -57,6 +61,9 @@ export interface AnimalRawRow {
   description: string | null;
   medical_json: Record<string, unknown>;
   traits_json: Record<string, unknown>;
+  sterilization_status: string;
+  sterilization_due_date: Date | null;
+  sterilization_voucher_ref: string | null;
   created_at: Date;
 }
 
@@ -65,6 +72,19 @@ interface PhotoRawRow {
   animal_id: string;
   position: number;
   alt_text: string | null;
+}
+
+function mapSterilization(row: Pick<
+  AnimalRawRow,
+  'sterilization_status' | 'sterilization_due_date' | 'sterilization_voucher_ref'
+>) {
+  return {
+    status: row.sterilization_status as SterilizationStatus,
+    dueDate: row.sterilization_due_date
+      ? new Date(row.sterilization_due_date as unknown as string | Date).toISOString()
+      : null,
+    voucherRef: row.sterilization_voucher_ref ?? null,
+  };
 }
 
 function animalCore(row: AnimalRawRow, photos: PhotoRawRow[]) {
@@ -82,6 +102,7 @@ function animalCore(row: AnimalRawRow, photos: PhotoRawRow[]) {
     description: row.description ?? null,
     medical: row.medical_json ?? {},
     traits: row.traits_json ?? {},
+    sterilization: mapSterilization(row),
     photos: photos.map(p => ({ id: p.id, position: p.position, altText: p.alt_text ?? null, url: null })),
     createdAt: new Date(row.created_at as unknown as string | Date).toISOString(),
   };
@@ -144,7 +165,8 @@ export class AnimalsService {
         ? sql` and (created_at, id) < (${cursor.createdAt}::timestamptz, ${cursor.id}::uuid)`
         : sql``;
       const rows = (await sql`
-        select id, shelter_id, name, species, breed, birth_year, sex, size, status, description, medical_json, traits_json, created_at
+        select id, shelter_id, name, species, breed, birth_year, sex, size, status, description, medical_json, traits_json,
+               sterilization_status, sterilization_due_date, sterilization_voucher_ref, created_at
         from animals
         where shelter_id = ${shelterId}::uuid${speciesFrag}${statusFrag}${cursorFrag}
         order by created_at desc, id desc
@@ -167,7 +189,8 @@ export class AnimalsService {
 
   async getById(ctx: TenantContext, shelterId: string, id: string): Promise<AnimalPublic | null> {    return this.tenants.withTenant(ctx, async sql => {
       const rows = (await sql`
-        select id, shelter_id, name, species, breed, birth_year, sex, size, status, description, medical_json, traits_json, created_at
+        select id, shelter_id, name, species, breed, birth_year, sex, size, status, description, medical_json, traits_json,
+               sterilization_status, sterilization_due_date, sterilization_voucher_ref, created_at
         from animals
         where id = ${id}::uuid and shelter_id = ${shelterId}::uuid
         limit 1`) as unknown as AnimalRawRow[];
@@ -226,7 +249,8 @@ export class AnimalsService {
         : sql``;
       const rows = (await sql`
         select a.id, a.shelter_id, a.name, a.species, a.breed, a.birth_year, a.sex, a.size,
-               a.status, a.description, a.medical_json, a.traits_json, a.created_at,
+               a.status, a.description, a.medical_json, a.traits_json,
+               a.sterilization_status, a.sterilization_due_date, a.sterilization_voucher_ref, a.created_at,
                s.name as shelter_name, s.slug as shelter_slug${distanceSelect}
         from animals a
         join shelters s on s.id = a.shelter_id
@@ -260,7 +284,8 @@ export class AnimalsService {
     return this.tenants.withTenant(ctx, async sql => {
       const rows = (await sql`
         select a.id, a.shelter_id, a.name, a.species, a.breed, a.birth_year, a.sex, a.size,
-               a.status, a.description, a.medical_json, a.traits_json, a.created_at,
+               a.status, a.description, a.medical_json, a.traits_json,
+               a.sterilization_status, a.sterilization_due_date, a.sterilization_voucher_ref, a.created_at,
                s.name as shelter_name, s.slug as shelter_slug, s.city as shelter_city, s.state as shelter_state
         from animals a
         join shelters s on s.id = a.shelter_id
@@ -281,6 +306,39 @@ export class AnimalsService {
           city: row.shelter_city ?? null,
           state: row.shelter_state ?? null,
         },
+      });
+    });
+  }
+
+  async sterilizationSummary(ctx: TenantContext, shelterId: string): Promise<ComplianceSummary> {
+    return this.tenants.withTenant(ctx, async sql => {
+      const rows = (await sql`
+        select count(*)::int as total,
+               count(*) filter (where sterilization_status = 'completed')::int as completed,
+               count(*) filter (where sterilization_status = 'scheduled')::int as scheduled,
+               count(*) filter (where sterilization_status = 'voucher_issued')::int as voucher_issued,
+               count(*) filter (where sterilization_status = 'unknown')::int as unknown,
+               count(*) filter (
+                 where sterilization_status in ('scheduled', 'voucher_issued')
+                   and sterilization_due_date < now()
+               )::int as overdue
+        from animals
+        where shelter_id = ${shelterId}::uuid`) as unknown as {
+        total: number;
+        completed: number;
+        scheduled: number;
+        voucher_issued: number;
+        unknown: number;
+        overdue: number;
+      }[];
+      const row = rows[0]!;
+      return complianceSummarySchema.parse({
+        total: row.total,
+        completed: row.completed,
+        scheduled: row.scheduled,
+        voucherIssued: row.voucher_issued,
+        unknown: row.unknown,
+        overdue: row.overdue,
       });
     });
   }
@@ -366,16 +424,21 @@ export class AnimalsService {
       status: AnimalStatus;
       medical: Record<string, unknown>;
       traits: Record<string, unknown>;
+      sterilization?: { status?: SterilizationStatus; dueDate?: string | null; voucherRef?: string | null };
     },
   ): Promise<AnimalPublic> {
     try {
       return await this.tenants.withTenant(ctx, async sql => {
         const rows = (await sql`
-          insert into animals (shelter_id, name, species, breed, birth_year, sex, size, status, description, medical_json, traits_json)
+          insert into animals (shelter_id, name, species, breed, birth_year, sex, size, status, description, medical_json, traits_json,
+                               sterilization_status, sterilization_due_date, sterilization_voucher_ref)
           values (${shelterId}::uuid, ${input.name}, ${input.species}, ${input.breed ?? null}, ${input.birthYear ?? null},
                   ${input.sex}, ${input.size ?? null}, ${input.status}, ${input.description ?? null},
-                  ${JSON.stringify(input.medical)}::jsonb, ${JSON.stringify(input.traits)}::jsonb)
-          returning id, shelter_id, name, species, breed, birth_year, sex, size, status, description, medical_json, traits_json, created_at`) as unknown as AnimalRawRow[];
+                  ${JSON.stringify(input.medical)}::jsonb, ${JSON.stringify(input.traits)}::jsonb,
+                  ${input.sterilization?.status ?? 'unknown'}, ${input.sterilization?.dueDate ?? null},
+                  ${input.sterilization?.voucherRef ?? null})
+          returning id, shelter_id, name, species, breed, birth_year, sex, size, status, description, medical_json, traits_json,
+                    sterilization_status, sterilization_due_date, sterilization_voucher_ref, created_at`) as unknown as AnimalRawRow[];
         const row = rows[0]!;
         await this.audit.append(sql, actorId, shelterId, 'animal.created', 'animal', row.id, { name: row.name });
         return mapAnimal(row, []);
@@ -411,9 +474,18 @@ export class AnimalsService {
       if (input.medical !== undefined)
         push('medical_json', JSON.stringify(input.medical), '::jsonb');
       if (input.traits !== undefined) push('traits_json', JSON.stringify(input.traits), '::jsonb');
+      const sterilization = input.sterilization as
+        | { status?: string; dueDate?: string | null; voucherRef?: string | null }
+        | undefined;
+      if (sterilization?.status !== undefined) push('sterilization_status', sterilization.status);
+      if (sterilization?.dueDate !== undefined)
+        push('sterilization_due_date', sterilization.dueDate ?? null);
+      if (sterilization?.voucherRef !== undefined)
+        push('sterilization_voucher_ref', sterilization.voucherRef ?? null);
       if (sets.length === 0) {
         const unchanged = (await sql`
-          select id, shelter_id, name, species, breed, birth_year, sex, size, status, description, medical_json, traits_json, created_at
+          select id, shelter_id, name, species, breed, birth_year, sex, size, status, description, medical_json, traits_json,
+                 sterilization_status, sterilization_due_date, sterilization_voucher_ref, created_at
           from animals where id = ${id}::uuid and shelter_id = ${shelterId}::uuid`) as unknown as AnimalRawRow[];
         const cur = unchanged[0];
         if (!cur) return null;
@@ -425,7 +497,8 @@ export class AnimalsService {
       const rows = (await sql.unsafe(
         `update animals set updated_at = now(), ${sets.join(', ')}
          where id = ${whereId} and shelter_id = $${params.length}::uuid
-         returning id, shelter_id, name, species, breed, birth_year, sex, size, status, description, medical_json, traits_json, created_at`,
+         returning id, shelter_id, name, species, breed, birth_year, sex, size, status, description, medical_json, traits_json,
+                   sterilization_status, sterilization_due_date, sterilization_voucher_ref, created_at`,
         params as Parameters<typeof sql.unsafe>[1],
       )) as unknown as AnimalRawRow[];
       const row = rows[0];
@@ -483,4 +556,74 @@ export class AnimalsService {
     }
     return map;
   }
+}
+
+interface SterilizationSweepAnimalRow {
+  animal_id: string;
+  animal_name: string;
+  sterilization_status: string;
+  sterilization_due_date: Date;
+  shelter_id: string;
+}
+
+/**
+ * Cron body (docs/design/12 §M9): one reminder email per shelter owner/admin covering
+ * every due-soon animal of that shelter. Grouping per shelter makes the run idempotent
+ * within itself — no owner ever receives more than one row per sweep.
+ */
+export async function runSterilizationSweep(
+  tenants: TenantService,
+  outbox: OutboxService,
+): Promise<number> {
+  const due = (await tenants.service(async sql => {
+    return sql`
+      select id as animal_id, name as animal_name, shelter_id,
+             sterilization_status, sterilization_due_date
+      from animals
+      where status = 'available'
+        and sterilization_status in ('scheduled', 'voucher_issued')
+        and sterilization_due_date < now() + interval '7 days'
+        and sterilization_due_date is not null
+      order by shelter_id, sterilization_due_date`;
+  })) as unknown as SterilizationSweepAnimalRow[];
+
+  const byShelter = new Map<string, SterilizationSweepAnimalRow[]>();
+  for (const row of due) {
+    const list = byShelter.get(row.shelter_id);
+    if (list) list.push(row);
+    else byShelter.set(row.shelter_id, [row]);
+  }
+
+  let sent = 0;
+  for (const [shelterId, animals] of byShelter) {
+    const recipients = (await tenants.service(async sql => {
+      return sql`
+        select u.email
+        from staff_members sm
+        join users u on u.id = sm.user_id and u.deleted_at is null
+        where sm.shelter_id = ${shelterId}::uuid and sm.role in ('owner', 'admin')`;
+    })) as unknown as { email: string }[];
+    const lines = animals
+      .map(a => `- ${a.animal_name}: due ${new Date(a.sterilization_due_date).toISOString().slice(0, 10)} (${a.sterilization_status === 'voucher_issued' ? 'voucher issued' : a.sterilization_status})`)
+      .join('\n');
+    for (const recipient of recipients) {
+      try {
+        await tenants.service(async sql => {
+          await outbox.enqueue(sql, 'sterilization.reminder', {
+            to: [recipient.email],
+            subject: `Sterilization reminder: ${animals.length} ${animals.length === 1 ? 'animal needs' : 'animals need'} scheduling`,
+            text:
+              `Hi there,\n\n` +
+              `The following animals have a sterilization appointment or voucher deadline coming up within 7 days:\n\n` +
+              `${lines}\n\n` +
+              `Open the animal's page in the admin to update the status once it's done.`,
+          });
+          sent++;
+        });
+      } catch (error) {
+        console.warn(`[sterilization] failed to enqueue reminder for shelter ${shelterId}`, error);
+      }
+    }
+  }
+  return sent;
 }

@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { ApiError, apiFetch } from '@/lib/api';
 import {
   OBSERVATION_TAGS,
+  sterilizationStatuses,
   type AnimalPublic,
   type AuthSession,
   type BehaviorObservation,
@@ -41,6 +42,21 @@ export default function AnimalDetailPage() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
 
+  const [sterilStatus, setSterilStatus] = useState<string>('unknown');
+  const [sterilDue, setSterilDue] = useState('');
+  const [sterilVoucher, setSterilVoucher] = useState('');
+  const [sterilSaving, setSterilSaving] = useState(false);
+  const [sterilError, setSterilError] = useState<string | null>(null);
+  const [sterilSavedAt, setSterilSavedAt] = useState<string | null>(null);
+
+  function hydrateSterilization(data: AnimalPublic) {
+    setSterilStatus(data.sterilization.status);
+    setSterilDue(
+      data.sterilization.dueDate ? new Date(data.sterilization.dueDate).toISOString().slice(0, 10) : '',
+    );
+    setSterilVoucher(data.sterilization.voucherRef ?? '');
+  }
+
   useEffect(() => {
     let cancelled = false;
     apiFetch<AuthSession>('/app/v1/auth/session')
@@ -67,7 +83,9 @@ export default function AnimalDetailPage() {
       `/admin/v1/shelters/${encodeURIComponent(shelterId)}/animals/${encodeURIComponent(animalId)}`,
     )
       .then((data) => {
-        if (!cancelled) setAnimal(data);
+        if (cancelled) return;
+        setAnimal(data);
+        hydrateSterilization(data);
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -132,6 +150,38 @@ export default function AnimalDetailPage() {
     }
   }
 
+  async function submitSterilization(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!shelterId || !animalId || sterilSaving) return;
+    setSterilSaving(true);
+    setSterilError(null);
+    setSterilSavedAt(null);
+    try {
+      const dueDate =
+        sterilDue === '' ? null : new Date(`${sterilDue}T00:00:00Z`).toISOString();
+      const data = await apiFetch<AnimalPublic>(
+        `/admin/v1/shelters/${encodeURIComponent(shelterId)}/animals/${encodeURIComponent(animalId)}`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({
+            sterilization: {
+              status: sterilStatus,
+              dueDate,
+              voucherRef: sterilVoucher === '' ? null : sterilVoucher,
+            },
+          }),
+        },
+      );
+      setAnimal(data);
+      hydrateSterilization(data);
+      setSterilSavedAt(new Date().toISOString());
+    } catch (err: unknown) {
+      setSterilError(err instanceof Error ? err.message : 'Could not save sterilization info.');
+    } finally {
+      setSterilSaving(false);
+    }
+  }
+
   if (loadError) {
     return (
       <main>
@@ -163,6 +213,61 @@ export default function AnimalDetailPage() {
           <p>Loading…</p>
         )}
       </header>
+
+      <section aria-labelledby="sterilization-heading" className="section-gap card">
+        <h2 id="sterilization-heading" className="card-title">
+          Sterilization
+        </h2>
+        <form onSubmit={submitSterilization}>
+          <label htmlFor="steril-status-input">Status</label>
+          <select
+            id="steril-status-input"
+            data-testid="steril-status"
+            value={sterilStatus}
+            onChange={event => setSterilStatus(event.target.value)}
+          >
+            {sterilizationStatuses.map(status => (
+              <option key={status} value={status}>
+                {status}
+              </option>
+            ))}
+          </select>
+
+          <label htmlFor="steril-due-input">Due date</label>
+          <input
+            id="steril-due-input"
+            type="date"
+            data-testid="steril-due"
+            value={sterilDue}
+            onChange={event => setSterilDue(event.target.value)}
+          />
+
+          <label htmlFor="steril-voucher-input">Voucher reference</label>
+          <input
+            id="steril-voucher-input"
+            data-testid="steril-voucher"
+            maxLength={120}
+            value={sterilVoucher}
+            onChange={event => setSterilVoucher(event.target.value)}
+            placeholder="e.g. VCH-2026-0042"
+          />
+
+          {sterilError ? (
+            <p role="alert" className="alert alert-danger">
+              {sterilError}
+            </p>
+          ) : null}
+          {sterilSavedAt && !sterilError ? (
+            <p role="status" className="muted t-caption">
+              Sterilization info saved.
+            </p>
+          ) : null}
+
+          <button type="submit" className="btn btn-primary" data-testid="steril-save" disabled={sterilSaving}>
+            {sterilSaving ? 'Saving…' : 'Save sterilization'}
+          </button>
+        </form>
+      </section>
 
       <section aria-labelledby="observations-heading" className="section-gap">
         <h2 id="observations-heading" className="t-heading">

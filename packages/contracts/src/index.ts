@@ -9,3 +9,4 @@ export * from './consents';
 export * from './verifications';
 export * from './sites';
 export * from './journeys';
+export * from './fosters';

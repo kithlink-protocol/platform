@@ -22,7 +22,7 @@ async function main(): Promise<void> {
     await drizzleMigrate(drizzle(sql), { migrationsFolder: MIGRATIONS_DIR });
     console.log('[db] drizzle migrations applied');
 
-    for (const file of ['policies.sql', 'm3_sites_sync.sql', 'm4_custom_domains.sql', 'm5_shelter_geo.sql', 'm6_application_notes.sql', 'm7_auth_tokens.sql', 'm8_adoption_journeys.sql', 'm9_review_checklist.sql', 'm10_behavior_observations.sql']) {
+    for (const file of ['policies.sql', 'm3_sites_sync.sql', 'm4_custom_domains.sql', 'm5_shelter_geo.sql', 'm6_application_notes.sql', 'm7_auth_tokens.sql', 'm8_adoption_journeys.sql', 'm9_review_checklist.sql', 'm10_behavior_observations.sql', 'm12_sterilization.sql']) {
       let text: string;
       try {
         text = readFileSync(join(SQL_DIR, file), 'utf8');
@@ -32,6 +32,14 @@ async function main(): Promise<void> {
       }
       await sql.unsafe(text);
       console.log(`[db] applied ${file}`);
+    }
+
+    try {
+      const fosterText = readFileSync(join(SQL_DIR, 'm11_foster.sql'), 'utf8');
+      await sql.unsafe(fosterText);
+      console.log('[db] applied m11_foster.sql');
+    } catch {
+      console.warn('[db] m11_foster.sql not found, skipping');
     }
     console.log('[db] migration complete');
   } finally {
