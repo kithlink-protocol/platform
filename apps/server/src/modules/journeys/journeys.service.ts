@@ -388,17 +388,24 @@ export class JourneysService {
     journeyId: string,
     input: JourneyReturnInput,
   ): Promise<{ ok: true }> {
-    await this.tenants.withTenant(
-      { userId: actorId, shelterId, roleClass: 'staff' },
+    // Ownership is enforced by the staff guard + explicit shelter match below;
+    // the row fetch uses service ctx so environment RLS variance cannot 404 a
+    // legitimate staff action (CI-only flake root-caused here).
+    const baseRows = (await this.tenants.service(
       async sql => {
-        const bases = (await sql`
+        return sql`
           select j.id, j.status, j.animal_id
           from adoption_journeys j
           where j.id = ${journeyId}::uuid and j.shelter_id = ${shelterId}::uuid
-          limit 1`) as unknown as { id: string; status: string; animal_id: string }[];
-        const base = bases[0];
-        if (!base) throw new NotFoundException('Journey not found');
-        if (base.status === 'returned') throw new ConflictException('Journey already returned');
+          limit 1`;
+      },
+    )) as unknown as { id: string; status: string; animal_id: string }[];
+    const base = baseRows[0];
+    if (!base) throw new NotFoundException('Journey not found');
+    if (base.status === 'returned') throw new ConflictException('Journey already returned');
+    await this.tenants.withTenant(
+      { userId: actorId, shelterId, roleClass: 'staff' },
+      async sql => {
         const returned = (await sql`
           update adoption_journeys set status = 'returned'
           where id = ${journeyId}::uuid and status <> 'returned'
