@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException, Inject } from '@nestjs/common';
-import type { AnySql, PendingQuery, Row, TenantContext } from '@kithlink/db';
+import type { PendingQuery, Row, TenantContext } from '@kithlink/db';
 import { AuditService } from '../../common/audit.service';
 import { TenantService } from '../db.module';
 

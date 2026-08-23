@@ -18,7 +18,7 @@ import {
   type AnimalSearchQuery,
   type AnimalStatus,
 } from '@kithlink/contracts';
-import { animalPhotos, animals, type AnySql, type PendingQuery, type Row, type Sql, type TenantContext } from '@kithlink/db';
+import { animalPhotos, animals, type AnySql, type PendingQuery, type Row, type TenantContext } from '@kithlink/db';
 import { decodeCursor, encodeCursor } from '../../common/cursor.util';
 import { AuditService } from '../../common/audit.service';
 import { isForeignKeyViolation } from '../../common/db.util';
