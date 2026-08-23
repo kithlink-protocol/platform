@@ -23,7 +23,7 @@ jobs:
           --health-timeout 3s
           --health-retries 10
       minio:
-        image: minio/minio:latest
+        image: bitnami/minio:latest
         env:
           MINIO_ROOT_USER: kithlink
           MINIO_ROOT_PASSWORD: kithlink_ci_minio
@@ -95,7 +95,7 @@ jobs:
           --health-timeout 3s
           --health-retries 10
       minio:
-        image: minio/minio:latest
+        image: bitnami/minio:latest
         env:
           MINIO_ROOT_USER: kithlink
           MINIO_ROOT_PASSWORD: kithlink_ci_minio
