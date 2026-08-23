@@ -1108,8 +1108,8 @@ describe.skipIf(!testUrl)('api integration', () => {
           where day_offset = 2 and journey_id = (
             select id from adoption_journeys where animal_id = ${animalId}::uuid limit 1)`;
         return sql`
-          select j.id, t.token_raw from adoption_journeys j
-          join journey_touchpoints t on t.journey_id = j.id
+          select j.id, t.token_raw, t.status from adoption_journeys j
+          join journey_touchpoints t on t.journey_id = j.id and t.day_offset = 2
           where j.animal_id = ${animalId}::uuid limit 1`;
       })) as unknown as { id: string; token_raw: string }[];
       returnJourneyId = rows[0]!.id;
