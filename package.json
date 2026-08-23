@@ -1,5 +1,6 @@
 {
   "name": "kithlink",
+  "version": "1.0.0-rc.1",
   "private": true,
   "packageManager": "pnpm@10.20.0",
   "engines": {

@@ -1,0 +1,104 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Enable pnpm
+        run: corepack enable && corepack prepare pnpm@10.20.0 --activate
+      - name: Install
+        run: pnpm install --frozen-lockfile=false
+      - name: Build, typecheck, lint
+        run: pnpm turbo build typecheck lint
+      - name: Unit + integration tests
+        run: pnpm --filter '!@kithlink/e2e' test
+        env:
+          DATABASE_URL: postgres://kithlink_app:kithlink_app_dev@localhost:5432/kithlink
+          TEST_DATABASE_URL: postgres://kithlink_app:kithlink_app_dev@localhost:5432/kithlink
+          DATABASE_OWNER_URL: postgres://kithlink:kithlink_dev@localhost:5432/kithlink
+
+  e2e:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: kithlink
+          POSTGRES_PASSWORD: kithlink_dev
+          POSTGRES_DB: kithlink
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U kithlink -d kithlink"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+      minio:
+        image: minio/minio:latest
+        env:
+          MINIO_ROOT_USER: kithlink
+          MINIO_ROOT_PASSWORD: kithlink_ci_minio
+        ports:
+          - 9000:9000
+    env:
+      TEST_DATABASE_URL: postgres://kithlink_app:kithlink_app_dev@localhost:5432/kithlink
+      DATABASE_URL: postgres://kithlink_app:kithlink_app_dev@localhost:5432/kithlink
+      DATABASE_OWNER_URL: postgres://kithlink:kithlink_dev@localhost:5432/kithlink
+      REDIS_URL: redis://localhost:6379
+      S3_ENDPOINT: http://localhost:9000
+      S3_REGION: us-east-1
+      S3_BUCKET: kithlink-ci
+      S3_ACCESS_KEY_ID: kithlink
+      S3_SECRET_ACCESS_KEY: kithlink_ci_minio
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Enable pnpm
+        run: corepack enable && corepack prepare pnpm@10.20.0 --activate
+      - name: Install
+        run: pnpm install --frozen-lockfile=false
+      - name: Provision DB roles (compose initdb)
+        run: |
+          PGPASSWORD=kithlink_dev psql -h localhost -U kithlink -d kithlink \
+            -f deploy/compose/initdb/01-roles.sql \
+            -f deploy/compose/initdb/02-extensions.sql
+      - name: Create MinIO bucket
+        run: |
+          docker run --rm --network host minio/mc:latest /bin/sh -c "
+            until mc alias set local http://localhost:9000 kithlink kithlink_ci_minio; do sleep 1; done;
+            mc mb --ignore-existing local/kithlink-ci"
+      - name: Generate master key
+        run: echo "KITHLINK_MASTER_KEY=$(openssl rand -base64 32)" >> "$GITHUB_ENV"
+      - name: Migrate
+        run: pnpm db:migrate
+      - name: Install Playwright browsers
+        run: pnpm --filter @kithlink/e2e exec playwright install --with-deps chromium
+      - name: Run e2e
+        run: pnpm --filter @kithlink/e2e test
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/e2e/playwright-report/
+          retention-days: 7

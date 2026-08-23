@@ -8,6 +8,7 @@ import {
   type ShelterDetail,
 } from '@kithlink/contracts';
 import type { TenantContext } from '@kithlink/db';
+import { getVersion } from '../../common/version';
 import { TenantService } from '../db.module';
 import { AnimalsService } from '../animals/animals.service';
 
@@ -35,6 +36,11 @@ export class PublicRegistryController {
     @Inject(TenantService) private readonly tenants: TenantService,
     @Inject(AnimalsService) private readonly animalsService: AnimalsService,
   ) {}
+
+  @Get('version')
+  version() {
+    return getVersion();
+  }
 
   @Get('shelters')
   shelters(@Query() query: unknown): Promise<ShelterDetail[]> {

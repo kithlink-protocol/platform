@@ -6,6 +6,7 @@ import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { ProblemFilter } from './common/http-exception.filter';
+import { rateLimit } from './common/rate-limit.middleware';
 import { MailDispatcher } from './modules/notifications/notifications.module';
 import { SyncService } from './modules/sync/sync.service';
 
@@ -31,6 +32,7 @@ export function configureApp(app: NestExpressApplication): void {
     .filter(Boolean);
   app.enableCors({ origin: origins, credentials: true });
   app.use(cookieParser());
+  app.use(rateLimit());
   app.useGlobalFilters(new ProblemFilter());
 }
 
