@@ -304,4 +304,111 @@ describe.skipIf(!testUrl)('api integration', () => {
       expect(Math.abs(expiresAt - (Date.now() + days90))).toBeLessThan(24 * 60 * 60 * 1000);
     });
   });
+
+  describe('M2 verification network', () => {
+    it('confirms, shares across shelters, accepts prior, and revokes', async () => {
+      const email = `m2-${Date.now()}@x.dev`;
+      await http().post('/app/v1/auth/register').send({ email, password: 'Password123x' });
+      const applicantCookie = (
+        await http().post('/app/v1/auth/login').send({ email, password: 'Password123x' })
+      ).headers['set-cookie'];
+      const put = await http().put('/app/v1/me/profile').set('Cookie', applicantCookie).send({
+        legalName: 'M2 Applicant',
+        displayName: 'Em',
+        phone: '+14155550000',
+      });
+      expect(put.status).toBe(200);
+      const profileId = put.body.id as string;
+
+      const artifactId = (await tenants.service(async sql => {
+        const rows = (await sql`
+          insert into artifacts (applicant_id, type, state, extracted_json)
+          values (${profileId}::uuid, 'lease_addendum', 'parsed', '{"landlord_phone":"+15551234567"}'::jsonb)
+          returning id`) as unknown as { id: string }[];
+        return rows[0]!.id;
+      })) as string;
+
+      const animalA = await tenants.service(async sql => {
+        const rows = (await sql`
+          insert into animals (shelter_id, name, species, status)
+          values (${shelterId}::uuid, 'M2A', 'dog', 'available') returning id`) as unknown as {
+          id: string;
+        }[];
+        return rows[0]!.id;
+      });
+      const applyA = await http().post('/app/v1/applications').set('Cookie', applicantCookie)
+        .send({ animalId: animalA, answers: { why: 'network test' } });
+      expect(applyA.status).toBe(201);
+
+      const confirm = await http()
+        .post(`/admin/v1/shelters/${shelterId}/artifacts/${artifactId}/verifications`)
+        .set('Cookie', devCookie)
+        .send({ method: 'landlord_call', outcome: 'confirmed', notesRedacted: 'Landlord confirmed pet policy' });
+      expect(confirm.status).toBe(201);
+      expect(confirm.body.state).toBe('verified');
+      expect(confirm.body.verifications[0].method).toBe('landlord_call');
+      expect(confirm.body.verifications[0].outcome).toBe('confirmed');
+      expect(confirm.body.verifications[0].shelterName.length).toBeGreaterThan(0);
+      expect(confirm.body.networkVerified).toBe(false);
+
+      const bEmail = `m2-staff-b-${Date.now()}@x.dev`;
+      await http().post('/app/v1/auth/register').send({ email: bEmail, password: 'Password123x' });
+      const shelterB = (await tenants.service(async sql => {
+        const s = (await sql`
+          insert into shelters (slug, name) values (${'m2-shelter-b-' + Date.now()}, 'Second Shelter')
+          returning id`) as unknown as { id: string }[];
+        await sql`
+          insert into staff_members (shelter_id, user_id, role)
+          select ${s[0]!.id}, u.id, 'owner' from users u where u.email = ${bEmail}`;
+        return s[0]!.id;
+      })) as string;
+
+      const animalB = await tenants.service(async sql => {
+        const rows = (await sql`
+          insert into animals (shelter_id, name, species, status)
+          values (${shelterB}::uuid, 'M2B', 'cat', 'available') returning id`) as unknown as {
+          id: string;
+        }[];
+        return rows[0]!.id;
+      });
+      const applyB = await http().post('/app/v1/applications').set('Cookie', applicantCookie)
+        .send({ animalId: animalB });
+      expect(applyB.status).toBe(201);
+      const applicationBId = applyB.body.application.id as string;
+
+      const bLogin = await http().post('/app/v1/auth/login').send({ email: bEmail, password: 'Password123x' });
+      const bCookie = bLogin.headers['set-cookie'];
+
+      const detail = await http()
+        .get(`/admin/v1/shelters/${shelterB}/applications/${applicationBId}`)
+        .set('Cookie', bCookie);
+      expect(detail.status).toBe(200);
+      expect(detail.body.applicant.legalName).toBe('M2 Applicant');
+      expect(detail.body.consent.status).toBe('active');
+      const shared = detail.body.artifacts.find((a: { id: string }) => a.id === artifactId);
+      expect(shared).toBeTruthy();
+      expect(shared.networkVerified).toBe(true);
+      expect(shared.verifications.some((v: { shelterName: string }) => v.shelterName === 'Happytail Rescue')).toBe(true);
+
+      const acceptPrior = await http()
+        .post(`/admin/v1/shelters/${shelterB}/artifacts/${artifactId}/verifications`)
+        .set('Cookie', bCookie)
+        .send({ method: 'prior_verification', outcome: 'confirmed' });
+      expect(acceptPrior.status).toBe(201);
+      expect(acceptPrior.body.verifications.length).toBe(2);
+      expect(acceptPrior.body.networkVerified).toBe(true);
+
+      const revoke = await http()
+        .post(`/app/v1/me/artifacts/${artifactId}/revoke-verifications`)
+        .set('Cookie', applicantCookie);
+      expect(revoke.status).toBe(201);
+      expect(revoke.body.revoked).toBe(2);
+      expect(revoke.body.networkVerified).toBe(false);
+
+      const rows = (await tenants.service(async sql => {
+        return sql`select outcome from verifications where artifact_id = ${artifactId}::uuid order by verified_at`;
+      })) as unknown as { outcome: string }[];
+      expect(rows.map(r => r.outcome)).toEqual(['revoked', 'revoked']);
+    });
+  });
 });

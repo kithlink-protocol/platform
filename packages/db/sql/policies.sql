@@ -283,3 +283,34 @@ DROP POLICY IF EXISTS outbox_dispatch ON outbox_events;
 CREATE POLICY outbox_dispatch ON outbox_events FOR UPDATE
   USING (current_setting('kithlink.role_class', true) = 'service')
   WITH CHECK (current_setting('kithlink.role_class', true) = 'service');
+
+-- NULLIF guards the empty-string default of the shelter GUC: casting '' to uuid throws.
+ALTER TABLE verifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE verifications FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS verifications_insert ON verifications;
+CREATE POLICY verifications_insert ON verifications FOR INSERT
+  WITH CHECK (
+    current_setting('kithlink.role_class', true) = 'service'
+    OR (
+      current_setting('kithlink.role_class', true) = 'staff'
+      AND verifications.shelter_id = NULLIF(current_setting('kithlink.shelter_id', true), '')::uuid
+    )
+  );
+DROP POLICY IF EXISTS verifications_select ON verifications;
+CREATE POLICY verifications_select ON verifications FOR SELECT
+  USING (
+    current_setting('kithlink.role_class', true) = 'service'
+    OR EXISTS (
+      SELECT 1 FROM artifacts a
+      JOIN applicant_profiles ap ON ap.id = a.applicant_id
+      WHERE a.id = verifications.artifact_id
+        AND current_setting('kithlink.user_id', true) = ap.user_id::text)
+    OR EXISTS (
+      SELECT 1 FROM artifacts a
+      JOIN consent_grants cg ON cg.applicant_id = a.applicant_id
+      WHERE a.id = verifications.artifact_id
+        AND cg.shelter_id = NULLIF(current_setting('kithlink.shelter_id', true), '')::uuid
+        AND cg.status = 'active'
+        AND now() < COALESCE(cg.revoked_at, cg.expires_at, 'infinity'))
+  );
+-- No UPDATE/DELETE policies: only service contexts may mutate verification rows.

@@ -243,6 +243,37 @@ export const artifactFiles = pgTable(
   },
 );
 
+export const verifications = pgTable(
+  'verifications',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    artifactId: uuid('artifact_id')
+      .notNull()
+      .references(() => artifacts.id, { onDelete: 'cascade' }),
+    shelterId: uuid('shelter_id')
+      .notNull()
+      .references(() => shelters.id),
+    performedBy: uuid('performed_by').references(() => users.id),
+    method: text('method').notNull(),
+    outcome: text('outcome').notNull(),
+    notesRedacted: text('notes_redacted'),
+    callLogUrl: text('call_log_url'),
+    verifiedAt: timestamp('verified_at', { withTimezone: true }).notNull().defaultNow(),
+    validUntil: timestamp('valid_until', { withTimezone: true }),
+  },
+  (t) => [
+    index('verifications_artifact_idx').on(t.artifactId, t.outcome),
+    check(
+      'verifications_method_check',
+      sql`${t.method} IN ('landlord_call','clinic_api','document_audit','automated','prior_verification')`,
+    ),
+    check(
+      'verifications_outcome_check',
+      sql`${t.outcome} IN ('confirmed','failed_contact','discrepancy','revoked')`,
+    ),
+  ],
+);
+
 export const applications = pgTable(
   'applications',
   {
@@ -343,10 +374,17 @@ export const artifactsRelations = relations(artifacts, ({ one, many }) => ({
     references: [applicantProfiles.id],
   }),
   files: many(artifactFiles),
+  verifications: many(verifications),
 }));
 
 export const artifactFilesRelations = relations(artifactFiles, ({ one }) => ({
   artifact: one(artifacts, { fields: [artifactFiles.artifactId], references: [artifacts.id] }),
+}));
+
+export const verificationsRelations = relations(verifications, ({ one }) => ({
+  artifact: one(artifacts, { fields: [verifications.artifactId], references: [artifacts.id] }),
+  shelter: one(shelters, { fields: [verifications.shelterId], references: [shelters.id] }),
+  performer: one(users, { fields: [verifications.performedBy], references: [users.id] }),
 }));
 
 export const applicationsRelations = relations(applications, ({ one, many }) => ({

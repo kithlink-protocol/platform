@@ -57,6 +57,15 @@ export const artifactInitUploadResponseSchema = z.object({
 });
 export type ArtifactInitUploadResponse = z.infer<typeof artifactInitUploadResponseSchema>;
 
+export const verificationSummarySchema = z.object({
+  shelterName: z.string(),
+  outcome: z.string(),
+  method: z.string(),
+  verifiedAt: z.string().datetime(),
+  validUntil: z.string().datetime().optional(),
+});
+export type VerificationSummary = z.infer<typeof verificationSummarySchema>;
+
 export const artifactPublicSchema = z.object({
   id: uuidSchema,
   type: artifactTypeSchema,
@@ -67,20 +76,12 @@ export const artifactPublicSchema = z.object({
   confidence: z.number().min(0).max(1).nullable(),
   extracted: z.record(z.unknown()).nullable(),
   networkVerified: z.boolean(),
+  verifications: z.array(verificationSummarySchema).default([]),
   createdAt: z.string().datetime(),
 });
 export type ArtifactPublic = z.infer<typeof artifactPublicSchema>;
 
-export const verificationSummarySchema = z.object({
-  shelterName: z.string(),
-  outcome: z.string(),
-  verifiedAt: z.string().datetime(),
-});
-export type VerificationSummary = z.infer<typeof verificationSummarySchema>;
-
-export const artifactWithVerificationsSchema = artifactPublicSchema.extend({
-  verifications: z.array(verificationSummarySchema).optional(),
-});
+export const artifactWithVerificationsSchema = artifactPublicSchema;
 export type ArtifactWithVerifications = z.infer<typeof artifactWithVerificationsSchema>;
 
 export const artifactListQuerySchema = z.object({

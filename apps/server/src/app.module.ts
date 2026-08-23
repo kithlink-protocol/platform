@@ -13,6 +13,7 @@ import { ArtifactsModule } from './modules/artifacts/artifacts.module';
 import { ApplicationsModule } from './modules/applications/applications.module';
 import { ConsentsModule } from './modules/consents/consents.module';
 import { ParseModule } from './modules/parse/parse.module';
+import { VerificationsModule } from './modules/verifications/verifications.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { ParseModule } from './modules/parse/parse.module';
     ApplicationsModule,
     ConsentsModule,
     ParseModule,
+    VerificationsModule,
   ],
 })
 export class AppModule {}

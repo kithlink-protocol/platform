@@ -28,5 +28,11 @@ export default defineConfig({
       timeout: 120000,
       reuseExistingServer: true,
     },
+    {
+      command: 'pnpm --filter @kithlink/admin dev',
+      url: 'http://127.0.0.1:3001',
+      timeout: 120000,
+      reuseExistingServer: true,
+    },
   ],
 });

@@ -226,7 +226,9 @@ export class ApplicationsService {
     const hasMore = rows.length > q.limit;
     const last = page[page.length - 1];
     const nextCursor =
-      hasMore && last ? encodeCursor({ createdAt: last.created_at.toISOString(), id: last.id }) : null;
+      hasMore && last
+        ? encodeCursor({ createdAt: new Date(last.created_at as unknown as string | Date).toISOString(), id: last.id })
+        : null;
     return applicationListResponseSchema.parse({ items, nextCursor });
   }
 
