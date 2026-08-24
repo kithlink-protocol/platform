@@ -20,6 +20,7 @@ import { ParseModule } from './modules/parse/parse.module';
 import { VerificationsModule } from './modules/verifications/verifications.module';
 import { SitesModule } from './modules/sites/sites.module';
 import { SyncModule } from './modules/sync/sync.module';
+import { ReportsModule } from './modules/reports/reports.module';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { SyncModule } from './modules/sync/sync.module';
     VerificationsModule,
     SitesModule,
     SyncModule,
+    ReportsModule,
   ],
 })
 export class AppModule {}
