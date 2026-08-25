@@ -1,39 +1,33 @@
 export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+export const dynamic = process.env.NEXT_OUTPUT_MODE === 'export'
+  ? 'force-static'
+  : 'force-dynamic';
+export function generateStaticParams() {
+  if (process.env.NEXT_OUTPUT_MODE === 'export') {
+    return [{ slug: '_excluded', file: ['_skip'] }];
+  }
+  return [];
+}
 
 const API_URL = process.env.API_URL ?? 'http://localhost:4000';
 
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: { slug: string; file?: string[] } },
-) {
-  const file = params.file?.join('/') ?? 'index.html';
-  if (file.split('/').some(part => part === '..' || part === '')) {
-    return new Response('Bad request', { status: 400 });
+): Promise<Response> {
+  if (process.env.NEXT_OUTPUT_MODE === 'export') {
+    return new Response('Static export — site serving requires the API server.', { status: 501 });
   }
-
-  let upstream: Response;
-  try {
-    upstream = await fetch(
-      `${API_URL}/public/v1/sites/${encodeURIComponent(params.slug)}/${file}`,
-      { cache: 'no-store' },
-    );
-  } catch {
-    return new Response('Site upstream unavailable', { status: 502 });
+  const { slug, file } = params;
+  if (!slug || slug.includes('..')) return new Response('Not found', { status: 404 });
+  const filePath = (file ?? ['index.html']).join('/');
+  const upstream = await fetch(`${API_URL}/public/v1/sites/${encodeURIComponent(slug)}/${filePath}`);
+  if (!upstream.ok) {
+    return new Response(upstream.body, { status: upstream.status });
   }
-
-  if (!upstream.ok || upstream.body === null) {
-    const status = upstream.status === 404 ? 404 : 502;
-    return new Response(status === 404 ? 'Not found' : 'Site upstream error', {
-      status,
-    });
-  }
-
   const headers = new Headers();
-  headers.set(
-    'Content-Type',
-    upstream.headers.get('content-type') ?? 'text/html; charset=utf-8',
-  );
-  headers.set('Cache-Control', 'public, max-age=60');
+  upstream.headers.forEach((v, k) => {
+    if (k !== 'transfer-encoding' && k !== 'content-encoding') headers.set(k, v);
+  });
   return new Response(upstream.body, { status: 200, headers });
 }

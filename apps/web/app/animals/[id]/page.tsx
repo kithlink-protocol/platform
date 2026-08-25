@@ -6,6 +6,8 @@ import { getAnimal, resolveAssetUrl } from '@/lib/api';
 import { FavoriteToggle } from '@/components/favorite-toggle';
 import type { AnimalDetail } from '@kithlink/contracts';
 
+export function generateStaticParams() { return [{ slug: 'preview' }, { id: 'preview' }]; }
+
 interface AnimalDetailPageProps {
   params: { id: string };
 }

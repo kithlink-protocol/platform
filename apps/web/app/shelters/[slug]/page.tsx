@@ -5,6 +5,8 @@ import { ApiError, getShelter, listShelterAnimals, resolveAssetUrl } from '@/lib
 import { FavoriteToggle } from '@/components/favorite-toggle';
 import type { AnimalPublic, ShelterDetail } from '@kithlink/contracts';
 
+export function generateStaticParams() { return [{ slug: 'preview' }, { id: 'preview' }]; }
+
 interface ShelterPageProps {
   params: { slug: string };
 }

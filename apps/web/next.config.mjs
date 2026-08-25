@@ -1,8 +1,11 @@
 /** @type {import('next').NextConfig} */
+const isExport = process.env.NEXT_OUTPUT_MODE === 'export';
+const apiUrl = process.env.API_URL ?? 'http://localhost:4000';
+
 const nextConfig = {
-  output: 'standalone',
+  ...(isExport ? { output: 'export', images: { unoptimized: true } } : {}),
   async rewrites() {
-    const apiUrl = process.env.API_URL ?? 'http://localhost:4000';
+    if (isExport) return [];
     return [{ source: '/api/:path*', destination: `${apiUrl}/:path*` }];
   },
 };
