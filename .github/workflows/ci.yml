@@ -186,6 +186,18 @@ jobs:
             sleep 2
           done
 
+      - name: Verify servers are running
+        run: |
+          echo "--- API health ---"
+          curl -sf http://127.0.0.1:4000/healthz || echo "API NOT RESPONDING"
+          echo "--- Web root ---"
+          curl -sf -o /dev/null -w "%{http_code}" http://127.0.0.1:3000/ || echo "WEB NOT RESPONDING"
+          echo ""
+          echo "--- API server log (last 20 lines) ---"
+          tail -20 /tmp/api-server.log 2>/dev/null || echo "no log"
+          echo "--- Web server log (last 20 lines) ---"
+          tail -20 /tmp/web-server.log 2>/dev/null || echo "no log"
+
       - name: Run e2e tests (no webServer config — servers already running)
         run: pnpm --filter @kithlink/e2e exec playwright test
         env:
