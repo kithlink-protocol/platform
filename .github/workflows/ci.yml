@@ -100,6 +100,7 @@ jobs:
       S3_SECRET_ACCESS_KEY: kithlink_ci_minio
       APP_URL: http://127.0.0.1:3000
       ADMIN_URL: http://127.0.0.1:3001
+      NEXT_PUBLIC_API_URL: http://127.0.0.1:4000
     steps:
       - uses: actions/checkout@v4
 
