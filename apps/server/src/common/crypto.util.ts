@@ -5,7 +5,9 @@ import {
   hkdfSync,
   randomBytes,
 } from 'node:crypto';
-import { Global, Injectable, Module } from '@nestjs/common';
+import { Global, Inject, Injectable, Module } from '@nestjs/common';
+
+export const KITHLINK_MASTER_KEY = 'KITHLINK_MASTER_KEY';
 
 interface SealedEnvelope {
   v: 1;
@@ -21,7 +23,7 @@ interface SealedEnvelope {
 export class CryptoUtil {
   private readonly kek: Buffer;
 
-  constructor(masterKeyB64?: string) {
+  constructor(@Inject(KITHLINK_MASTER_KEY) masterKeyB64?: string) {
     const raw = masterKeyB64 ?? process.env.KITHLINK_MASTER_KEY;
     let master: Buffer;
     if (raw) {
@@ -91,7 +93,13 @@ export class CryptoUtil {
 
 @Global()
 @Module({
-  providers: [CryptoUtil],
-  exports: [CryptoUtil],
+  providers: [
+    CryptoUtil,
+    {
+      provide: KITHLINK_MASTER_KEY,
+      useValue: process.env.KITHLINK_MASTER_KEY,
+    },
+  ],
+  exports: [CryptoUtil, KITHLINK_MASTER_KEY],
 })
 export class CryptoModule {}

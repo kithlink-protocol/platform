@@ -166,7 +166,6 @@ jobs:
           for i in $(seq 1 30); do
             curl -sf http://127.0.0.1:4000/healthz && break
 
-            exit 0
             sleep 1
           done
 
