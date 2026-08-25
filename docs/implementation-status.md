@@ -64,3 +64,17 @@ export/delete.
 | Gotcha-Day anniversary touchpoint | Shipped | day 365 |
 
 Planned: photo moments, milestone badge persistence, SMS channel, foster-journey reuse (M8).
+
+## Universal application & shared data (2026-08-25)
+
+| Capability | Status | Where |
+| --- | --- | --- |
+| Universal application form (household/residence/landlord/pets/history/lifestyle/preferences/vet) | Shipped | `universal_application` JSONB + PUT/GET `/app/v1/me/universal-application` |
+| Rental property registry (crowdsourced pet policies) | Shipped | `rental_properties` table + search/save endpoints |
+| Post-adoption checklist (10 practical tasks) | Shipped | journey `checklist_items` JSONB + public toggle endpoint |
+| Ethical nudges ("Rex noticed you haven't visited 👀") | Shipped | favorite-based sweep + outbox emails |
+| Nudge preferences (opt-out) | Shipped | users.settings.nudgesEnabled |
+
+## Known flaky tests (CI environment)
+- m20 nudge sweep tests: pass in isolation, fail when full suite runs against dirty DB (shared-state pollution)
+- e2e Playwright: locator timeouts on cold-start CI runners (passes with retries=2)
