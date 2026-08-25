@@ -3,7 +3,7 @@ RUN corepack enable && corepack prepare pnpm@10.20.0 --activate
 
 FROM base AS deps
 WORKDIR /repo
-COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json tsconfig.base.json ./
 COPY apps/server/package.json apps/server/
 COPY packages/contracts/package.json packages/contracts/
 COPY packages/db/package.json packages/db/
@@ -12,12 +12,12 @@ RUN pnpm install --frozen-lockfile=false --filter @kithlink/server...
 
 FROM deps AS build
 WORKDIR /repo
+COPY tsconfig.base.json ./
 COPY packages/contracts/ packages/contracts/
 COPY packages/db/ packages/db/
 COPY packages/sync-adapters/ packages/sync-adapters/
 COPY apps/server/ apps/server/
 RUN pnpm --filter @kithlink/contracts build \
-    && pnpm --filter @kithlink/db generate --help > /dev/null 2>&1 || true \
     && pnpm --filter @kithlink/db build \
     && pnpm --filter @kithlink/sync-adapters build \
     && pnpm --filter @kithlink/server build
@@ -35,9 +35,6 @@ COPY --from=build /repo/packages/sync-adapters/dist packages/sync-adapters/dist
 COPY --from=build /repo/packages/sync-adapters/package.json packages/sync-adapters/
 COPY --from=build /repo/apps/server/dist apps/server/dist
 COPY --from=build /repo/apps/server/package.json apps/server/
-COPY --from=build /repo/node_modules/.pnpm node_modules/.pnpm
-COPY --from=build /repo/node_modules/@kithlink node_modules/@kithlink
-RUN ln -s /app/node_modules/.pnpm node_modules/.pnpm 2>/dev/null || true
 ENV NODE_ENV=production
 EXPOSE 4000
 CMD ["node", "apps/server/dist/main.api.js"]

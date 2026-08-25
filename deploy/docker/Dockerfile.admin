@@ -3,7 +3,7 @@ RUN corepack enable && corepack prepare pnpm@10.20.0 --activate
 
 FROM base AS deps
 WORKDIR /repo
-COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json tsconfig.base.json ./
 COPY apps/admin/package.json apps/admin/
 COPY packages/contracts/package.json packages/contracts/
 RUN pnpm install --frozen-lockfile=false --filter @kithlink/admin...
@@ -11,6 +11,7 @@ RUN pnpm install --frozen-lockfile=false --filter @kithlink/admin...
 FROM deps AS build
 WORKDIR /repo
 ENV NEXT_TELEMETRY_DISABLED=1
+COPY tsconfig.base.json ./
 COPY packages/contracts/ packages/contracts/
 RUN pnpm --filter @kithlink/contracts build
 COPY apps/admin/ apps/admin/
