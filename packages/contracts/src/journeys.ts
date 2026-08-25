@@ -38,12 +38,24 @@ export const journeyTokenSchema = z.string().min(20).max(200);
 export const journeyPublicViewQuerySchema = z.object({ jt: journeyTokenSchema });
 export type JourneyPublicViewQuery = z.infer<typeof journeyPublicViewQuerySchema>;
 
+export const journeyChecklistCategories = ['health', 'supplies', 'home', 'social'] as const;
+export const journeyChecklistCategorySchema = z.enum(journeyChecklistCategories);
+export type JourneyChecklistCategory = (typeof journeyChecklistCategories)[number];
+
+export const journeyChecklistItemSchema = z.object({
+  label: z.string().min(1).max(200),
+  done: z.boolean(),
+  category: journeyChecklistCategorySchema,
+});
+export type JourneyChecklistItem = z.infer<typeof journeyChecklistItemSchema>;
+
 export const journeyPublicViewSchema = z.object({
   animalName: z.string(),
   shelterName: z.string(),
   dayOffset: z.number().int(),
   dayLabel: z.string(),
   alreadyDone: z.boolean(),
+  checklist: z.array(journeyChecklistItemSchema).default([]),
 });
 export type JourneyPublicView = z.infer<typeof journeyPublicViewSchema>;
 
@@ -131,3 +143,23 @@ export const journeyReturnSchema = z.object({
   reason: z.string().min(1).max(2000),
 });
 export type JourneyReturnInput = z.infer<typeof journeyReturnSchema>;
+
+export const journeyChecklistUpdateSchema = z.object({
+  items: z.array(journeyChecklistItemSchema).max(50),
+});
+export type JourneyChecklistUpdateInput = z.infer<typeof journeyChecklistUpdateSchema>;
+
+export const journeyChecklistToggleSchema = z.object({
+  token: journeyTokenSchema,
+  itemLabel: z.string().min(1).max(200),
+  done: z.boolean(),
+});
+export type JourneyChecklistToggleInput = z.infer<typeof journeyChecklistToggleSchema>;
+
+export const journeyChecklistStateSchema = z.object({
+  items: z.array(journeyChecklistItemSchema),
+});
+export type JourneyChecklistState = z.infer<typeof journeyChecklistStateSchema>;
+
+export const nudgePreferencesSchema = z.object({ enabled: z.boolean() });
+export type NudgePreferences = z.infer<typeof nudgePreferencesSchema>;

@@ -3,7 +3,7 @@
 import { useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useState, type FormEvent } from 'react';
 
-import type { JourneyPublicView } from '@kithlink/contracts';
+import type { JourneyChecklistItem, JourneyPublicView } from '@kithlink/contracts';
 import { apiFetch, ClientApiError } from '@/lib/client-api';
 
 const TRAIL_STEPS = [
@@ -39,6 +39,15 @@ const TOPICS = [
 ] as const;
 
 const CONFETTI_COLORS = ['#C2410C', '#0F766E', '#B45309', '#15803D', '#FEF0E7'];
+
+const CHECKLIST_CATEGORY_ORDER = ['health', 'supplies', 'home', 'social'] as const;
+
+const CHECKLIST_CATEGORY_LABELS: Record<string, string> = {
+  health: 'Health',
+  supplies: 'Supplies',
+  home: 'Home',
+  social: 'Social',
+};
 
 function MoodRow({
   testid,
@@ -98,6 +107,7 @@ function JourneyInner() {
   const token = params.get('jt') ?? '';
 
   const [view, setView] = useState<JourneyPublicView | null>(null);
+  const [checklist, setChecklist] = useState<JourneyChecklistItem[]>([]);
   const [state, setState] = useState<'loading' | 'missing' | 'form' | 'done' | 'skipped'>('loading');
   const [petMood, setPetMood] = useState<number | null>(null);
   const [ownerMood, setOwnerMood] = useState<number | null>(null);
@@ -117,6 +127,7 @@ function JourneyInner() {
       .then((data) => {
         if (cancelled) return;
         setView(data);
+        setChecklist(data.checklist);
         if (data.alreadyDone) {
           setState('missing');
         } else {
@@ -193,6 +204,21 @@ function JourneyInner() {
           ? prev
           : [...prev, topic],
     );
+  }
+
+  async function toggleChecklistItem(label: string, done: boolean) {
+    const previous = checklist;
+    setChecklist((prev) =>
+      prev.map((item) => (item.label === label ? { ...item, done } : item)),
+    );
+    try {
+      await apiFetch('/public/v1/journey/checklist', {
+        method: 'POST',
+        body: JSON.stringify({ token, itemLabel: label, done }),
+      });
+    } catch {
+      setChecklist(previous);
+    }
   }
 
   if (error && state === 'loading') {
@@ -360,6 +386,40 @@ function JourneyInner() {
           {submitting ? 'Sending…' : 'Send update'}
         </button>
       </form>
+
+      {checklist.length > 0 ? (
+        <section className="card section-gap" data-testid="getting-started-checklist">
+          <h2 className="card-title">Getting Started Checklist</h2>
+          <p className="t-meta">At your own pace — every win counts. 💛</p>
+          {CHECKLIST_CATEGORY_ORDER.map((category) => {
+            const items = checklist.filter((item) => item.category === category);
+            if (items.length === 0) return null;
+            return (
+              <div key={category} className="form-row">
+                <h3 className="t-label">{CHECKLIST_CATEGORY_LABELS[category]}</h3>
+                <ul className="checklist-group">
+                  {items.map((item) => (
+                    <li key={item.label}>
+                      <label>
+                        <input
+                          type="checkbox"
+                          data-testid="checklist-item"
+                          data-category={item.category}
+                          checked={item.done}
+                          onChange={(event) =>
+                            toggleChecklistItem(item.label, event.target.checked)
+                          }
+                        />{' '}
+                        {item.label}
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
+        </section>
+      ) : null}
 
       <button
         type="button"

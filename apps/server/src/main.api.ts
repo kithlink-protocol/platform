@@ -9,7 +9,7 @@ import { ProblemFilter } from './common/http-exception.filter';
 import { rateLimit } from './common/rate-limit.middleware';
 import { TenantService } from './modules/db.module';
 import { runSterilizationSweep } from './modules/animals/animals.service';
-import { startJourneysScheduler } from './modules/journeys/journeys.service';
+import { startJourneysScheduler, startNudgeScheduler } from './modules/journeys/journeys.service';
 import { startFosterScheduler } from './modules/fosters/fosters.service';
 import { MailDispatcher, OutboxService } from './modules/notifications/notifications.module';
 import { SyncService } from './modules/sync/sync.service';
@@ -32,6 +32,12 @@ export function startSyncCron(app: INestApplication): void {
 export function startJourneysCron(app: INestApplication): void {
   if (process.env.SKIP_JOURNEYS_CRON === '1') return;
   startJourneysScheduler(app.get(TenantService), app.get(OutboxService));
+}
+
+/** Rides the same guard as the journeys cron so test/dev boots can skip both. */
+export function startNudgesCron(app: INestApplication): void {
+  if (process.env.SKIP_JOURNEYS_CRON === '1') return;
+  startNudgeScheduler(app.get(TenantService), app.get(OutboxService));
 }
 
 /** Rides the same guard as the journeys cron so test/dev boots can skip both. */
@@ -77,6 +83,7 @@ async function bootstrap(): Promise<void> {
   await app.listen(Number(process.env.API_PORT) || 4000);
   startSyncCron(app);
   startJourneysCron(app);
+  startNudgesCron(app);
   startSterilizationCron(app);
   startFosterCron(app);
 }

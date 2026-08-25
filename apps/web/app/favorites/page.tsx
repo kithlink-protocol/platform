@@ -12,13 +12,42 @@ type FavoritesState =
   | { status: 'error'; message: string }
   | { status: 'ready'; items: Favorite[] };
 
+type Suggestion = { id: string; name: string; status: string };
+
+async function fetchSuggestions(animalId: string): Promise<Suggestion[]> {
+  const detail = await apiFetch<{ species: string }>(
+    `/public/v1/animals/${encodeURIComponent(animalId)}`,
+  );
+  const res = await apiFetch<{
+    items: Array<{ id: string; name: string; species: string; status: string }>;
+  }>(`/public/v1/animals?species=${encodeURIComponent(detail.species)}&limit=24`);
+  return res.items
+    .filter(
+      (item) =>
+        item.id !== animalId && item.species === detail.species && item.status === 'available',
+    )
+    .slice(0, 3)
+    .map((item) => ({ id: item.id, name: item.name, status: item.status }));
+}
+
 export default function FavoritesPage() {
   const [state, setState] = useState<FavoritesState>({ status: 'loading' });
+  const [suggestions, setSuggestions] = useState<Record<string, Suggestion[]>>({});
 
   const reload = useCallback(() => {
     setState({ status: 'loading' });
     apiFetch<{ items: Favorite[] }>('/app/v1/me/favorites')
-      .then(res => setState({ status: 'ready', items: res.items }))
+      .then((res) => {
+        setState({ status: 'ready', items: res.items });
+        const adopted = res.items.filter((item) => item.animalStatus !== 'available');
+        for (const item of adopted) {
+          fetchSuggestions(item.animalId)
+            .then((friends) =>
+              setSuggestions((prev) => ({ ...prev, [item.animalId]: friends })),
+            )
+            .catch(() => undefined);
+        }
+      })
       .catch((error: unknown) => {
         setState({
           status: 'error',
@@ -82,6 +111,23 @@ export default function FavoritesPage() {
                   </span>
                 </p>
                 <p className="t-meta">Saved {new Date(item.addedAt).toISOString().slice(0, 10)}</p>
+                {item.animalStatus !== 'available' ? (
+                  <div data-testid="favorite-adopted-note">
+                    <p>
+                      {item.animalName} found their forever home 💛 Here are some friends who are
+                      still looking…
+                    </p>
+                    {(suggestions[item.animalId] ?? []).length > 0 ? (
+                      <ul>
+                        {(suggestions[item.animalId] ?? []).map((friend) => (
+                          <li key={friend.id}>
+                            <Link href={`/animals/${friend.id}`}>{friend.name}</Link>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                ) : null}
                 <button
                   type="button"
                   className="btn btn-ghost btn-sm"

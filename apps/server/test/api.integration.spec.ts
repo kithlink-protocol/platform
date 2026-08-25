@@ -1127,7 +1127,6 @@ describe.skipIf(!testUrl)('api integration', () => {
         .post(`/admin/v1/shelters/${shelterId}/journeys/${returnJourneyId}/return`)
         .set('Cookie', devCookie)
         .send({ reason: 'Match was not the right fit' });
-      if (ret.status !== 201) console.log('RET_FAIL_BODY', JSON.stringify(ret.body));
       expect(ret.status).toBe(201);
 
       const animal = (await tenants.service(async sql => {

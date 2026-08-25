@@ -10,3 +10,4 @@ export * from './verifications';
 export * from './sites';
 export * from './journeys';
 export * from './fosters';
+export * from './universal-application';

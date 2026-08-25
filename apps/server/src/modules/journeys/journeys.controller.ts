@@ -1,9 +1,11 @@
-import { Body, Controller, Get, Inject, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Inject, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import {
   journeyPublicViewQuerySchema,
   journeyRespondSchema,
   journeyReturnSchema,
   journeyCaseResolveSchema,
+  journeyChecklistToggleSchema,
+  journeyChecklistUpdateSchema,
   journeySkipSchema,
   type JourneyPublicView,
 } from '@kithlink/contracts';
@@ -36,6 +38,13 @@ export class PublicJourneysController {
     const input = journeySkipSchema.parse(body);
     return this.journeys.skip(input.token);
   }
+
+  @HttpCode(HttpStatus.OK)
+  @Post('journey/checklist')
+  toggleChecklist(@Body() body: unknown) {
+    const input = journeyChecklistToggleSchema.parse(body);
+    return this.journeys.toggleChecklistItem(input);
+  }
 }
 
 @UseGuards(SessionGuard, StaffRoleGuard)
@@ -59,6 +68,18 @@ export class AdminJourneysController {
     @Param('id') id: string,
   ) {
     return this.journeys.staffGet(principal.user.id, shelterId, id);
+  }
+
+  @Patch(':id/checklist')
+  @RequireStaffRole('coordinator')
+  updateChecklist(
+    @Principal() principal: Principal,
+    @Param('shelterId') shelterId: string,
+    @Param('id') id: string,
+    @Body() body: unknown,
+  ) {
+    const input = journeyChecklistUpdateSchema.parse(body);
+    return this.journeys.staffUpdateChecklist(principal.user.id, shelterId, id, input);
   }
 
   @Post('cases/:caseId/resolve')
