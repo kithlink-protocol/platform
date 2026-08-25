@@ -1,0 +1,26 @@
+FROM node:20-slim AS base
+RUN corepack enable && corepack prepare pnpm@10.20.0 --activate
+
+FROM base AS deps
+WORKDIR /repo
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
+COPY apps/web/package.json apps/web/
+COPY packages/contracts/package.json packages/contracts/
+RUN pnpm install --frozen-lockfile=false --filter @kithlink/web...
+
+FROM deps AS build
+WORKDIR /repo
+ENV NEXT_TELEMETRY_DISABLED=1
+COPY packages/contracts/ packages/contracts/
+RUN pnpm --filter @kithlink/contracts build
+COPY apps/web/ apps/web/
+RUN pnpm --filter @kithlink/web build
+
+FROM node:20-slim AS runner
+WORKDIR /app
+ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1
+COPY --from=build /repo/apps/web/.next/standalone ./
+COPY --from=build /repo/apps/web/.next/static apps/web/.next/static
+COPY --from=build /repo/apps/web/public apps/web/public
+EXPOSE 3000
+CMD ["node", "apps/web/server.js"]
