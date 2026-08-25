@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kithlink — find your pet, run your shelter</title>
+<meta name="description" content="One profile, verified once. Free websites and adoption tools for shelters. Open source.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐾</text></svg>">
+<style>
+:root{
+  --cream:#FFFBF5;--card:#FFFFFF;--ink:#2D2A26;--soft:#8C8580;
+  --line:#EDE8E0;--ember:#E85D3D;--ember-dark:#D04A28;--ember-pale:#FFF1EB;
+  --teal:#1A7A6E;--teal-pale:#E6F4F1;--gold:#F5A623;--green:#3B9E5C;
+}
+*{box-sizing:border-box;margin:0}
+html{scroll-behavior:smooth}
+body{background:var(--cream);color:var(--ink);font-family:'Georgia',serif;line-height:1.65;-webkit-font-smoothing:antialiased}
+.sans{font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif}
+.wrap{max-width:68rem;margin-inline:auto;padding-inline:1.25rem}
+
+nav{position:sticky;top:0;z-index:100;background:rgba(255,251,245,.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+nav .wrap{display:flex;align-items:center;justify-content:space-between;padding-block:.7rem}
+.logo{font-size:1.15rem;font-weight:700;text-decoration:none;color:var(--ink);letter-spacing:-.02em}
+.logo b{color:var(--ember)}
+.nav-r{display:flex;gap:1.35rem;font-family:system-ui,sans-serif;font-size:.83rem;font-weight:500}
+.nav-r a{color:var(--soft);text-decoration:none}
+.nav-r a:hover{color:var(--ink)}
+
+.hero{text-align:center;padding-block:clamp(3.5rem,8vw,6.5rem) clamp(2.5rem,5vw,4rem)}
+.hero .emoji{font-size:3rem;margin-bottom:.75rem;display:block}
+.hero h1{font-size:clamp(2rem,5.5vw,3.4rem);font-weight:700;line-height:1.12;letter-spacing:-.025em;max-width:46rem;margin-inline:auto}
+.hero h1 em{font-style:normal;color:var(--ember)}
+.hero .sub{font-size:clamp(1rem,2vw,1.18rem);color:var(--soft);max-width:38rem;margin:1.2rem auto 0;font-family:system-ui,sans-serif}
+.paths{display:flex;gap:1rem;justify-content:center;margin-top:2.25rem;flex-wrap:wrap}
+.path-btn{display:inline-flex;align-items:center;gap:.55rem;padding:.85rem 1.75rem;border-radius:14px;font-family:system-ui,sans-serif;font-size:.95rem;font-weight:600;text-decoration:none;transition:transform .15s,box-shadow .15s}
+.path-btn:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(232,93,61,.16)}
+.path-btn.adopt{background:var(--ember);color:#fff}
+.path-btn.shelter{background:var(--card);color:var(--ink);border:1.5px solid var(--border)}
+
+.paws{text-align:center;padding-block:1.5rem;color:var(--ember);opacity:.3;font-size:1.4rem;letter-spacing:.8rem}
+
+h2.sec{text-align:center;font-size:clamp(1.45rem,3vw,1.95rem);font-weight:700;letter-spacing:-.015em;margin-bottom:.35rem}
+p.sec-sub{text-align:center;color:var(--soft);font-family:system-ui,sans-serif;font-size:.92rem;margin-bottom:2.25rem}
+section{padding-block:clamp(2.5rem,5vw,4rem)}
+
+.cards{display:grid;gap:1.1rem;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:1.6rem;transition:border-color .15s}
+.card:hover{border-color:var(--ember)}
+.card .ico{font-size:1.75rem;margin-bottom:.7rem;display:block}
+.card h3{font-family:system-ui,sans-serif;font-size:.98rem;font-weight:650;margin-bottom:.4rem}
+.card p{color:var(--soft);font-size:.87rem;line-height:1.55;font-family:system-ui,sans-serif}
+
+.split{display:grid;grid-template-columns:1fr 1fr;gap:1.1rem}
+@media(max-width:680px){.split{grid-template-columns:1fr}}
+.aud{border-radius:18px;padding:2rem 1.75rem}
+.aud.adopters{background:linear-gradient(135deg,#FFF6EE,#FFEFDF)}
+.aud.shelters{background:linear-gradient(135deg,#E6F4F1,#DDF0EA)}
+.aud h3{font-family:system-ui,sans-serif;font-size:1.05rem;font-weight:650;margin-bottom:.85rem}
+.aud ul{list-style:none;padding:0;font-family:system-ui,sans-serif;font-size:.88rem;color:var(--soft)}
+.aud li{padding-left:1.3rem;position:relative;margin-bottom:.55rem}
+.aud li::before{content:'🐾';position:absolute;left:0;font-size:.75rem}
+.aud .cta{display:inline-block;margin-top:1.1rem;padding:.55rem 1.3rem;border-radius:10px;text-decoration:none;font-family:system-ui,sans-serif;font-weight:600;font-size:.88rem}
+.aud .cta.dark{background:var(--ink);color:var(--cream)}
+.aud .cta.green{background:var(--teal);color:#fff}
+
+.steps-wrap{counter-reset:n}
+.step-card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:1.4rem 1.5rem;position:relative;margin-bottom:.8rem}
+.step-card::before{counter-increment:n;content:counter(n);position:absolute;top:1.2rem;left:-16px;width:32px;height:32px;border-radius:50%;background:var(--ember);color:#fff;font-family:system-ui,sans-serif;font-weight:700;font-size:.82rem;display:flex;align-items:center;justify-content:center}
+.steps-wrap{padding-left:1.5rem}
+.step-card p{color:var(--soft);font-size:.88rem;font-family:system-ui,sans-serif}
+.step-card strong{font-family:system-ui,sans-serif;font-size:.92rem}
+
+.quote{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:1.75rem;max-width:34rem;margin-inline:auto;text-align:center}
+.quote .heart{font-size:1.5rem;margin-bottom:.5rem}
+.quote p{font-style:italic;color:var(--soft);font-size:.94rem;line-height:1.6}
+.quote small{display:block;margin-top:.75rem;color:var(--ink);font-weight:600;font-family:system-ui,sans-serif;font-style:normal;font-size:.82rem}
+
+footer{border-top:1px solid var(--line);padding-block:1.75rem;text-align:center;color:var(--soft);font-family:system-ui,sans-serif;font-size:.82rem}
+footer .links{margin-top:.6rem;display:flex;gap:1.5rem;justify-content:center;flex-wrap:wrap}
+footer a{color:var(--soft)}
+.badge-row{display:flex;gap:.5rem;justify-content:center;margin-top:.75rem;flex-wrap:wrap}
+.badge{display:inline-block;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:.15rem .7rem;font-size:.72rem;font-weight:500}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+@media(max-width:520px){.nav-r{display:none}}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <a class="logo" href="#">🐾 Kith<b>link</b></a>
+    <div class="nav-r sans">
+      <a href="#how">How it works</a>
+      <a href="#who">Who it's for</a>
+      <a href="#stories">Stories</a>
+      <a href="https://github.com/kithlink-protocol/platform">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <span class="emoji">🏠🐕🐈</span>
+  <h1>The shelter paper trail,<br>gone. The love, <em>here to stay.</em></h1>
+  <p class="sub">One verified profile that follows you to every shelter.<br>Free websites and tools so rescue teams can focus on animals — not paperwork.</p>
+  <div class="paths">
+    <a class="path-btn adopt" href="#adopters">I want to adopt 🏡</a>
+    <a class="path-btn shelter" href="#shelters">I run a rescue 🏢</a>
+  </div>
+</header>
+
+<div class="paws">🐾 🐾 🐾</div>
+
+<section id="how">
+  <h2 class="sec sans">Three steps. That's it.</h2>
+  <p class="sec-sub">No more re-faxing your lease to five different rescues.</p>
+  <div class="wrap steps-wrap">
+    <div class="step-card"><strong>Create your profile</strong><p>Household, lifestyle, experience — once. Encrypted, private by default.</p></div>
+    <div class="step-card"><strong>Upload documents once</strong><p>Lease addendum, vet records, ID. Any shelter can verify them.</p></div>
+    <div class="step-card"><strong>Apply anywhere</strong><p>Your verified info travels with you. Shelters see what they need — instantly.</p></div>
+  </div>
+</div>
+
+<section id="who" class="section">
+  <h2 class="sec sans">Made for both sides of the leash</h2>
+  <p class="sec-sub">Adopters get dignity and speed. Shelters get tools, not busywork.</p>
+  <div class="wrap split">
+    <div class="aud adopters">
+      <h3>🏡 For adopters</h3>
+      <ul>
+        <li>Your documents verified once — portable across every shelter</li>
+        <li>Search all adoptable pets with filters for location, age, size</li>
+        <li>Track applications in real time</li>
+        <li>Gentle post-adoption check-ins at day 2, 14 & 30</li>
+        <li>Revoke document access anytime, instantly</li>
+      </ul>
+      <a class="cta dark" href="#">Start your profile →</a>
+    </div>
+    <div class="aud shelters">
+      <h3>🏢 For shelters</h3>
+      <ul>
+        <li>Free public website on your own subdomain</li>
+        <li>Applicant pipeline with objective review checklists</li>
+        <li>See an adopter's full verification history before deciding</li>
+        <li>Petfinder sync + RSS export included</li>
+        <li>Foster network portal with capacity tracking</li>
+      </ul>
+      <a class="cta green" href="#">Launch your site →</a>
+    </div>
+  </div>
+</section>
+
+<section class="section" style="background:var(--surface);border-top:1px solid var(--line);border-bottom:1px solid var(--line)">
+  <h2 class="sec sans">What's inside</h2>
+  <p class="sec-sub">Open source, AGPLv3 core · MIT themes · Self-host free forever</p>
+  <div class="wrap cards">
+    <div class="card"><span class="ico">🔒</span><h3>Encrypted by default</h3><p>Documents sealed with AES-256-GCM. Only shelters reviewing your application can see them — revoke instantly.</p></div>
+    <div class="card"><span class="ico">🌐</span><h3>One-click websites</h3><p>Every shelter gets a free public site on a subdomain or custom domain. Zero code required.</p></div>
+    <div class="card"><span class="ico">📋</span><h3>Smart applications</h3><p>Status pipeline, staff notes, objective checklists. See the whole story before you decide.</p></div>
+    <div class="card"><span class="ico">📊</span><h3>Reports that matter</h3><p>Outcomes, length-of-stay, post-adoption check-ins — exported as CSV for grant writing.</p></div>
+    <div class="card"><span class="ico">🔄</span><h3>Syndication built-in</h3><p>Petfinder sync adapter + RSS feed. Your listings reach more adopters without extra work.</p></div>
+    <div class="card"><span class="ico">💚</span><h3>Settling In journeys</h3><p>Automated day-2 / day-14 / day-30 check-ins after adoption. Gentle, game-like, skippable. Reduces returns.</p></div>
+  </div>
+</section>
+
+<section id="stories" class="section">
+  <h2 class="sec sans">Why it matters</h2>
+  <p class="sec-sub">The numbers behind why we built this.</p>
+  <div class="wrap split">
+    <div class="quote">
+      <div class="heart">📉</div>
+      <p>"66% of failed adoptions happen within the first 30 days — mostly because adopters feel alone during the transition."</p>
+      <small>— Animal welfare research</small>
+    </div>
+    <div class="quote">
+      <div class="heart">📄</div>
+      <p>"The average adopter fills out 5+ redundant applications, re-submitting the same lease and vet records to every shelter."</p>
+      <small>— Industry survey</small>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p>🐾 Kithlink — a CivicHearth Collective project</p>
+    <div class="links">
+      <a href="https://github.com/kithlink-protocol/platform">Source code</a>
+      <a href="https://github.com/kithlink-protocol/platform/blob/main/docs/index.md">Docs</a>
+      <a href="https://github.com/kithlink-protocol/platform/blob/main/LICENSE">AGPLv3 + MIT</a>
+      <a href="https://github.com/kithlink-protocol/platform/security">Security</a>
+    </div>
+    <div class="badge-row">
+      <span class="badge">AGPLv3 core</span>
+      <span class="badge">MIT themes</span>
+      <span class="badge">Self-hostable</span>
+      <span class="badge">Docker Compose</span>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
